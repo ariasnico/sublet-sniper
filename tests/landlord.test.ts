@@ -23,6 +23,19 @@ describe("landlord safety", () => {
     expect(plan.text).toContain("$3,600");
     expect(plan.text).toMatch(/video walkthrough/);
   });
+  it("one reply refuses money-before-viewing AND counters the rent AND asks for the live tour", async () => {
+    const msg = "It's $3,800/mo, available now. Please send a $7,600 deposit via Zelle to hold it before the viewing.";
+    const plan = planReply(msg, thread(), defaultProfile(), slots);
+    expect(plan.intent).toBe("safety");
+    expect(plan.counter).toBe(3600); // ~95% of $3,800, rounded to $50, never the $7,600 deposit
+    expect(plan.text).toMatch(/don't send any deposit/);
+    expect(plan.text).toMatch(/would you do \$3,600\/mo/);
+    expect(plan.text).toMatch(/live video walkthrough/);
+    const { writeReply } = await import("@/lib/landlord");
+    expect(await writeReply(plan, msg, defaultProfile())).toBe(plan.text); // safety replies are never rewritten
+    // Over budget: the counter is capped at the budget.
+    expect(planReply("Rent is $4,500/month, wire the deposit today", thread(), defaultProfile(), slots).counter).toBe(4000);
+  });
   it("proposes slots after a video tour and picks the chosen one", () => {
     expect(planReply("here's a video walkthrough, when can you come?", thread(), defaultProfile(), slots).proposeSlots).toBe(true);
     expect(pickSlot("Option 2 works for me", slots)).toEqual(slots[1]);

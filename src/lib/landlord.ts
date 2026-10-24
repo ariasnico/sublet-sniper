@@ -3,14 +3,17 @@ import { fmtLA, laDay } from "./time";
 import type { RenterProfile, Thread } from "./store";
 import type { Slot } from "./calendar";
 
-export const RED_FLAGS: { re: RegExp; label: string }[] = [
-  { re: /\b(out of (the )?(country|town|state)|overseas|abroad|missionary|deployed|fuera del pa[ií]s)\b/i, label: "Landlord says they are out of the country" },
-  { re: /\bzelle\b/i, label: "Asks for Zelle (no buyer protection)" },
-  { re: /\b(wire|wiring|western union|moneygram|bank transfer)\b/i, label: "Asks for a wire / money transfer" },
-  { re: /\b(gift ?cards?|bitcoin|crypto|usdt|cash ?app|venmo)\b/i, label: "Asks for gift cards / crypto / P2P app" },
-  { re: /\b(deposit|first (and|&) last|holding fee|reserve|application fee)\b.{0,80}\b(before|prior|to hold|now|today|first|asap|secure)\b|\b(before|prior to)\b.{0,40}\b(viewing|showing|seeing|tour)\b.{0,60}\b(deposit|pay|send)\b/i, label: "Wants money before an in-person viewing" },
-  { re: /\b(keys? (will be )?(mailed|shipped|sent)|airbnb (will|to) (hold|handle)|courier)\b/i, label: "Keys by mail / third-party escrow story" },
+export const RED_FLAGS: { re: RegExp; label: string; es: string }[] = [
+  { re: /\b(out of (the )?(country|town|state)|overseas|abroad|missionary|deployed|fuera del pa[ií]s)\b/i, label: "Landlord says they are out of the country", es: "dice que está fuera del país" },
+  { re: /\bzelle\b/i, label: "Asks for Zelle (no buyer protection)", es: "pidió pago por Zelle" },
+  { re: /\b(wire|wiring|western union|moneygram|bank transfer)\b/i, label: "Asks for a wire / money transfer", es: "pidió una transferencia" },
+  { re: /\b(gift ?cards?|bitcoin|crypto|usdt|cash ?app|venmo)\b/i, label: "Asks for gift cards / crypto / P2P app", es: "pidió gift cards, cripto o apps de pago" },
+  { re: /\b(deposit|first (and|&) last|holding fee|reserve|application fee)\b.{0,80}\b(before|prior|to hold|now|today|first|asap|secure)\b|\b(before|prior to)\b.{0,40}\b(viewing|showing|seeing|tour)\b.{0,60}\b(deposit|pay|send)\b/i, label: "Wants money before an in-person viewing", es: "quiere plata antes de la visita" },
+  { re: /\b(keys? (will be )?(mailed|shipped|sent)|airbnb (will|to) (hold|handle)|courier)\b/i, label: "Keys by mail / third-party escrow story", es: "promete mandar las llaves por correo" },
 ];
+
+/** Spanish wording of a red-flag label (for the user-facing narration). */
+export const flagEs = (label: string) => RED_FLAGS.find((f) => f.label === label)?.es ?? label;
 
 export function detectRedFlags(text: string): string[] {
   return RED_FLAGS.filter((f) => f.re.test(text)).map((f) => f.label);
@@ -103,12 +106,33 @@ export function classify(text: string, thread: Thread): Intent {
   return "generic";
 }
 
-export interface ReplyPlan { intent: Intent; text: string; flags: string[]; proposeSlots: boolean; slot: Slot | null; askedProof: boolean }
+export interface ReplyPlan { intent: Intent; text: string; flags: string[]; proposeSlots: boolean; slot: Slot | null; askedProof: boolean;
+  /** Our counter-offer ($/mo) when we negotiated. */ counter?: number | null;
+  /** Price we accepted ($/mo) after a counter. */ accepted?: number | null }
 
-function priceIn(text: string): number | null {
-  const m = text.replace(/,/g, "").match(/\$\s?(\d{3,5})/);
-  return m ? Number(m[1]) : null;
+export function pricesIn(text: string): number[] {
+  return [...text.replace(/,/g, "").matchAll(/\$\s?(\d{3,5})/g)].map((m) => Number(m[1]));
 }
+export function priceIn(text: string): number | null {
+  return pricesIn(text)[0] ?? null;
+}
+/** The monthly rent in a message: a "$X/mo"-style amount first (so a "$7,600 deposit" isn't read as rent), else the first price. */
+export function rentIn(text: string): number | null {
+  const m = text.replace(/,/g, "").match(/\$\s?(\d{3,5})\s*(?:\/\s?mo(?:nth)?\b|per month|a month|monthly)/i);
+  return m ? Number(m[1]) : priceIn(text);
+}
+/** Counter: the budget cap when asked is above it, otherwise ~5% off rounded to $50. */
+export function counterOffer(asked: number, maxBudget: number): number {
+  return asked > maxBudget ? maxBudget : Math.round((asked * 0.95) / 50) * 50;
+}
+/** Did the landlord accept our counter? A price mentioned at or below it, or an explicit "deal". */
+export function acceptsOffer(raw: string, offered: number): boolean {
+  const text = stripQuoted(raw);
+  const rent = rentIn(text);
+  if (rent != null) return rent <= offered;
+  return /\b(deal|agreed|i accept|accepted|you('ve)? got (it|a deal)|that price works|de acuerdo|trato hecho)\b/i.test(text);
+}
+const usd = (n: number) => `$${n.toLocaleString("en-US")}`;
 
 /** Deterministic reply planner. Safety rules always run here, even when an LLM writes the wording. */
 export function planReply(text: string, thread: Thread, p: RenterProfile, slots: Slot[], windowSlot: Slot | null = null): ReplyPlan {
@@ -118,9 +142,15 @@ export function planReply(text: string, thread: Thread, p: RenterProfile, slots:
   const slotList = slots.map((s, i) => `${i + 1}) ${fmtLA(s.start)}`).join("\n");
   const sign = `\n\n${p.name}`;
   switch (intent) {
-    case "safety":
-      return { intent, flags, proposeSlots: false, slot: null, askedProof: thread.askedProof, text:
-        `Thanks for the reply. I don't send any deposit, Zelle, wire or other payment before seeing the place in person (or on a live video call) and signing a written sublease. California also caps move-in payments (AB 12). If that works for you, happy to keep going; otherwise I'll pass.${sign}` };
+    case "safety": {
+      // One deterministic reply: refuse the payment AND (if they quoted rent above our offer) counter AND ask for the live tour.
+      const asked = rentIn(text);
+      const counter = asked && asked > 0 && (!thread.deal?.offered || asked > thread.deal.offered) ? counterOffer(asked, p.maxBudget) : null;
+      return { intent, flags, proposeSlots: false, slot: null, askedProof: true, counter, text:
+        `Thanks for the reply. I don't send any deposit, Zelle, wire or other payment before seeing the place in person (or on a live video call) and signing a written sublease. California also caps move-in payments (AB 12).` +
+        `${counter ? ` On price: my budget tops out at ${usd(p.maxBudget)}/mo; would you do ${usd(counter)}/mo for ${p.moveIn} to ${p.moveOut}?` : ""}` +
+        ` Could we start with a quick live video walkthrough, and could you confirm you're the leaseholder? If that works for you, happy to keep going; otherwise I'll pass.${sign}` };
+    }
     case "pick_slot": {
       const slot = pickSlot(text, thread.offeredSlots?.map((s) => JSON.parse(s) as Slot));
       return { intent, flags, proposeSlots: false, slot, askedProof: thread.askedProof, text:
@@ -139,11 +169,16 @@ export function planReply(text: string, thread: Thread, p: RenterProfile, slots:
       return { intent, flags, proposeSlots: true, slot: null, askedProof: thread.askedProof, text:
         `${intent === "proof_given" ? "Thanks, that helps." : "Happy to come see it."} I can do any of these (Pacific time):\n${slotList}\nWhich one works for you?${sign}` };
     case "price": {
-      const asked = priceIn(text);
-      const counter = asked && asked > p.maxBudget ? p.maxBudget : asked && asked > 0 ? Math.round((asked * 0.95) / 50) * 50 : null;
-      return { intent, flags, proposeSlots: false, slot: null, askedProof: true, text:
-        `${counter ? `Thanks. My budget tops out at $${p.maxBudget.toLocaleString("en-US")}/mo; would you do $${counter.toLocaleString("en-US")}/mo for ${p.moveIn} to ${p.moveOut}? I can be flexible on move-in day. ` : ""}` +
-        `${thread.askedProof ? "" : "Before anything else, could you do a quick live video walkthrough (or send a short video of the unit) and confirm you're the leaseholder? "}Then I'd love to schedule a viewing.${sign}` };
+      const asked = rentIn(text);
+      const proof = thread.askedProof ? "" : "Before anything else, could you do a quick live video walkthrough (or send a short video of the unit) and confirm you're the leaseholder? ";
+      // After our counter, a price within budget (and not above the original ask) closes the deal: move to scheduling.
+      if (asked && thread.deal?.offered && asked <= p.maxBudget && asked <= thread.deal.asked)
+        return { intent, flags, proposeSlots: true, slot: null, askedProof: true, accepted: asked, text:
+          `Deal, ${usd(asked)}/mo works for me, thank you! ${proof}I can do any of these for a viewing (Pacific time):\n${slotList}\nWhich one works for you?${sign}` };
+      const counter = asked && asked > 0 ? counterOffer(asked, p.maxBudget) : null;
+      return { intent, flags, proposeSlots: false, slot: null, askedProof: true, counter, text:
+        `${counter ? `Thanks. My budget tops out at ${usd(p.maxBudget)}/mo; would you do ${usd(counter)}/mo for ${p.moveIn} to ${p.moveOut}? I can be flexible on move-in day. ` : ""}` +
+        `${proof}Then I'd love to schedule a viewing.${sign}` };
     }
     case "question":
     case "generic":
