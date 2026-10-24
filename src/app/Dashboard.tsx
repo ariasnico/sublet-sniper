@@ -226,7 +226,9 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
     for (const n of needs) {
       const nu = ids(n).filter((id) => !seenNeeds.current!.has(id));
       if (!nu.length) continue;
-      nu.forEach((id) => seenNeeds.current!.add(id)); fresh = true;
+      nu.forEach((id) => seenNeeds.current!.add(id));
+      if (n.kind === "craigslist_replies") continue; // optional, never interrupt for it
+      fresh = true;
       toast.warning("Your agent needs you", { description: needCopy(n).title });
     }
     // On a phone, jump straight to the card that needs a tap.
@@ -374,7 +376,8 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
   const consent = needs.find((n) => n.kind === "autopilot_consent");
   const events = s?.events ?? [];
   const dealsEmpty = !needs.length && !events.length && !threads.length;
-  const needCount = needs.reduce((n, x) => n + (x.items?.length ?? 1), 0);
+  // Craigslist drafts are optional (a human must click Reply there); only real decisions count as "needs you".
+  const needCount = needs.filter((x) => x.kind !== "craigslist_replies").reduce((n, x) => n + (x.items?.length ?? 1), 0);
   const listingOf = (approvalId?: string, listingId?: string) => {
     const lid = listingId ?? s?.approvals.find((a) => a.id === approvalId)?.listingId;
     return lid ? mapListings.find((l) => l.id === lid) : undefined;
