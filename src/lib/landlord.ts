@@ -5,7 +5,7 @@ import type { Slot } from "./calendar";
 
 export const RED_FLAGS: { re: RegExp; label: string; short: string }[] = [
   { re: /\b(out of (the )?(country|town|state)|overseas|abroad|missionary|deployed|fuera del pa[ií]s)\b/i, label: "Landlord says they are out of the country", short: "Says they're out of the country" },
-  { re: /\bzelle\b/i, label: "Asks for Zelle (no buyer protection)", short: "Asked for Zelle" },
+  { re: /\bzelle\b|\b(?:sale|sell|cell) deposit\b/i, label: "Asks for Zelle (no buyer protection)", short: "Asked for Zelle" },
   { re: /\b(wire|wiring|western union|moneygram|bank transfer)\b/i, label: "Asks for a wire / money transfer", short: "Asked for a wire" },
   { re: /\b(gift ?cards?|bitcoin|crypto|usdt|cash ?app|venmo)\b/i, label: "Asks for gift cards / crypto / P2P app", short: "Asked for gift cards or crypto" },
   { re: /\b(deposit|first (and|&) last|holding fee|reserve|application fee)\b.{0,80}\b(before|prior|to hold|now|today|first|asap|secure)\b|\b(before|prior to)\b.{0,40}\b(viewing|showing|seeing|tour)\b.{0,60}\b(deposit|pay|send)\b/i, label: "Wants money before an in-person viewing", short: "Wants money before a viewing" },

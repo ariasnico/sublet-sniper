@@ -74,7 +74,8 @@ export async function callVars(t: Thread, call: CallRecord): Promise<Vars> {
     landlord_name: process.env.DEMO_LANDLORD_NAME || "the landlord", listing_title: clean(t.listingTitle), listed_rent: listed || max,
     target_rent: target, max_budget: max, renter_name: s.profile.name, renter_first_name: s.profile.name.split(" ")[0],
     move_in: humanDate(s.profile.moveIn), move_out: humanDate(s.profile.moveOut),
-    free_slots: slots.map((x) => fmtLA(x.start)).join("; ") || "weekday evenings after 5 PM",
+    // DEMO_VIEWING_SLOT pins the slot the agent proposes (e.g. "Monday at 6 PM") so the live demo is predictable.
+    free_slots: process.env.DEMO_VIEWING_SLOT || slots.map((x) => fmtLA(x.start)).join("; ") || "weekday evenings after 5 PM",
     today: new Intl.DateTimeFormat("en-US", { timeZone: TZ, weekday: "long", month: "long", day: "numeric", year: "numeric" }).format(new Date()),
     renter_profile: `- ${s.profile.occupation}. ${s.profile.about} ${s.profile.smoker ? "Smoker" : "Non-smoker"}, ${s.profile.pets}. ${s.profile.references}.`,
     callback_number: process.env.VOICE_CALLBACK_NUMBER || "+1 415 582 1858", renter_email: s.profile.email,

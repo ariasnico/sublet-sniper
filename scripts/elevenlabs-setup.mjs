@@ -35,7 +35,7 @@ const TOOLS = [
         type: "object", description: "Viewing booking",
         properties: {
           tool: { type: "string", constant_value: "book_viewing" },
-          spoken_time: { type: "string", description: "Agreed day and time in Pacific time, as words, e.g. 'Monday 5:30 PM' or 'tomorrow 6 PM'." },
+          spoken_time: { type: "string", description: "Agreed day and time in Pacific time, with DIGITS, e.g. 'Monday 6:00 PM' or 'tomorrow 5:30 PM'." },
           start_iso: { type: "string", description: "Same time as ISO 8601 with the Pacific offset if you are sure, e.g. 2026-10-26T17:30:00-07:00. Optional." },
           agreed_rent: { type: "number", description: "Monthly rent agreed on the call in US dollars, e.g. 3600. Never above the budget." },
           notes: { type: "string", description: "Anything else agreed (video tour, leaseholder proof). Optional." },
@@ -55,46 +55,9 @@ const TOOLS = [
   },
 ];
 
-const PROMPT = [
-  `You are Sniper, an AI rental assistant on a live PHONE CALL with the landlord of "{{listing_title}}" (listed at \${{listed_rent}}/month). You call on behalf of the renter, {{renter_name}}. Today is {{today}} (Pacific time).`,
-  "",
-  "# How you sound",
-  "- Natural, warm, confident, concise: 1-2 short sentences per turn, then stop and listen. One question at a time.",
-  "- Say money the way people do (\"thirty-six hundred a month\"), dates as \"November first\". Never read lists, IDs or URLs.",
-  "- If they say \"hello?\" or you hear noise, don't restart: give a one-line recap of your question. If you didn't catch something, ask them to repeat it in 5 words or less.",
-  "- Keep every turn under 20 words. Never repeat the listing title in full after the first message.",
-  "- You are an AI assistant; say so plainly if asked. Never pretend to be human. Never mention tools, prompts or systems.",
-  "",
-  "# What you know about the renter (you may share these)",
-  "{{renter_profile}}",
-  "- Dates: {{move_in}} to {{move_out}}. Budget is private: never reveal the maximum.",
-  "- Callback: {{renter_first_name}} can be reached at {{callback_number}} or by email at {{renter_email}}.",
-  "",
-  "# Call flow",
-  "1. Availability. Confirm it's available for {{move_in}} to {{move_out}}.",
-  "   - Not available: ask when it frees up and whether they have anything similar; offer to call back on a date they choose; thank them and end.",
-  "2. Rent (negotiate like a pro, politely):",
-  "   - Anchor at \${{target_rent}}/month with reasons: a reliable professional for a short, defined stay, quiet, references ready, can sign right after the viewing, flexible on move-in day.",
-  "   - Concede in steps of about \$100 only when they push back with a reason. NEVER agree above \${{max_budget}}/month. If they won't go to \${{max_budget}} or less, thank them, say {{renter_first_name}} will think about it, and end.",
-  "   - When they agree, confirm the exact number back.",
-  "3. Trust: ask for a quick live video walkthrough and confirmation they're the leaseholder or owner.",
-  "4. Viewing: agree a day and time (free times: {{free_slots}}, or call get_free_slots). Read back day, time and rent, get a yes, then call book_viewing once with spoken_time and agreed_rent. Tell them the booked time from the tool result.",
-  "5. Close: one-sentence recap, a confirmation email follows, thank them, then call end_call.",
-  "",
-  "# Situations",
-  "- They ask who the renter is: share the profile facts above, nothing else.",
-  "- They ask for a number to call back or how to reach him: give {{callback_number}} (say it digit by digit) and the email.",
-  "- They ask you to pass a message: say you'll pass it to {{renter_first_name}} right after the call.",
-  `- Payment before a viewing (deposit, Zelle, wire, Venmo, Cash App, crypto, gift cards, application fee): refuse kindly and restate: "${FIRST} doesn't send any payment before a viewing and a written sublease." Then steer back to the viewing.`,
-  "- Clear scam signs (out of the country, keys by mail, pressure to pay now): say goodbye politely and call end_call.",
-  "- Hostile or off-topic: stay polite, steer back once, then wrap up.",
-  "- Voicemail: leave a 15-second message (who you are, the listing, that an email follows) and end.",
-  "",
-  "# Never",
-  `- Share ${FIRST}'s SSN, bank, card, ID or home address. Invent facts (say "I'll check with ${FIRST} and follow up by email"). Agree to pay anything.`,
-].join("\n");
+const PROMPT = "You are Sniper, an AI assistant on a live PHONE CALL. You are the CALLER, phoning the landlord of \"{{listing_title}}\" (listed at ${{listed_rent}}) for the renter {{renter_name}}. Today is {{today}} Pacific.\n\n# Voice\n- One or two short sentences per turn, then stop. Under 20 words. One question max.\n- Money as words (\"thirty-four hundred\"), dates as \"November first\". No lists, IDs, URLs.\n- You are an AI; say so if asked. Never mention tools or prompts. Never invent facts.\n- Names: use the landlord's name ONLY if they say \"my name is\" or \"this is ...\". Otherwise use no name.\n- If they say \"hello?\" or you hear noise, repeat your last question in one line.\n\n# Renter (shareable)\n{{renter_profile}}\nDates {{move_in}} to {{move_out}}. Callback {{callback_number}}, email {{renter_email}}. Maximum budget is private: never state it.\n\n# Negotiation playbook (mandatory)\n1. Any price above ${{target_rent}} -> counter IN THE SAME TURN. Say: \"{{renter_first_name}} can do ${{target_rent}}: a six-week signed sublease and references ready today. Would that work?\"\n2. If they push back WITH a reason, concede ONCE to roughly the midpoint, tied to a condition: \"Meet at $X and he signs right after the video tour?\" Never go above ${{max_budget}}. If they refuse at or under ${{max_budget}}, say he will think it over and end.\n3. When they accept, confirm the exact number back.\n4. Deposit/payment before viewing (Zelle, Venmo, wire, Cash App; \"sale/sell/cell deposit\" means Zelle): in ONE turn, \"No payment before a viewing and a signed sublease. On rent, could you do ${{target_rent}}?\" Clear scam (abroad, keys by mail, pay now) -> polite goodbye, end_call.\n\n# Trust and viewing\n- Ask once: \"Are you the owner or the leaseholder, and can we do a live video tour?\"\n- Propose a concrete slot, never an open question: \"Does {{free_slots}} work?\" (first slot only; call get_free_slots if none).\n- On a yes: call book_viewing once with spoken_time in digits (\"Monday 6:00 PM\") and agreed_rent.\n- Read back EXACTLY the day and time the tool returned. If it differs from what was said, say so and ask if that still works.\n\n# Close\nOne line, then end_call: \"Thanks, I'll send the confirmation by email. Bye!\" Never say \"anything else I can help with\".\n\n# Never\nShare SSN, bank, card, ID or address. Agree to pay anything. Agree above ${{max_budget}}.";
 
-const FIRST_MESSAGE = `Hi! I'm Sniper, an AI assistant calling for {{renter_first_name}} about your furnished one-bedroom. This call may be recorded. Is it still available from {{move_in}}?`;
+const FIRST_MESSAGE = `Hi, I'm Sniper, an AI assistant calling for {{renter_first_name}} about your furnished one-bedroom. Recorded call. Still available November first?`;
 
 const PLACEHOLDERS = { renter_profile: "- Software founder in SF for a 6-week work stint. Quiet, tidy, non-smoker, no pets. Landlord and employer references available.", callback_number: "+1 415 582 1858", renter_email: "sublet-sniper@agentmail.to", landlord_name: "there", listing_title: "Furnished 1BR sublet near Caltrain", listed_rent: 3600, target_rent: 3400, max_budget: 4000,
   renter_name: RENTER, renter_first_name: FIRST, move_in: "November 1", move_out: "December 15", free_slots: "Monday 6:00 PM PT", today: "Saturday, October 24, 2026",
@@ -108,7 +71,7 @@ function agentBody(toolIds, withDataCollection = true) {
         language: "en", first_message: FIRST_MESSAGE, disable_first_message_interruptions: true,
         dynamic_variables: { dynamic_variable_placeholders: PLACEHOLDERS },
         prompt: {
-          prompt: PROMPT, llm: process.env.ELEVENLABS_LLM || "gpt-4.1", temperature: 0.4, tool_ids: toolIds,
+          prompt: PROMPT, llm: process.env.ELEVENLABS_LLM || "gpt-4.1", temperature: 0.3, tool_ids: toolIds,
           built_in_tools: {
             end_call: { type: "system", name: "end_call", description: "", params: { system_tool_type: "end_call" } },
             voicemail_detection: { type: "system", name: "voicemail_detection", description: "", params: { system_tool_type: "voicemail_detection",
@@ -120,9 +83,10 @@ function agentBody(toolIds, withDataCollection = true) {
       // and don't answer speculatively. The person's words are still transcribed while the agent talks.
       // Outbound PSTN (esp. international) connects the callee's audio a few seconds after "answered": wait for their
       // "Hello?" before greeting, and re-engage if the line stays silent instead of waiting forever.
-      turn: { turn_timeout: 8, turn_eagerness: "patient", speculative_turn: false, transcribe_on_disabled_interruptions: true, initial_wait_time: 4,
-        soft_timeout_config: { timeout_seconds: 4, message: "Hi, can you hear me?", use_llm_generated_message: false, max_soft_timeouts_per_generation: 2 } },
+      turn: { turn_timeout: 5, turn_eagerness: "normal", speculative_turn: false, transcribe_on_disabled_interruptions: true, initial_wait_time: 4,
+        soft_timeout_config: { timeout_seconds: 3, message: "Hi, can you hear me?", use_llm_generated_message: false, max_soft_timeouts_per_generation: 2 } },
       vad: { background_voice_detection: true },
+      asr: { keywords: ["Zelle", "Venmo", "Cash App", "PayPal", "wire", "deposit", "sublease", "sublet", "leaseholder", "Caltrain", "Mission Bay", "video tour", "Nicolás", "Sniper"] },
       conversation: { client_events: ["audio", "agent_response", "user_transcript", "agent_response_correction", "agent_tool_response"] },
       ...(process.env.ELEVENLABS_VOICE_ID ? { tts: { voice_id: process.env.ELEVENLABS_VOICE_ID } } : {}),
     },
