@@ -1,6 +1,6 @@
 "use client";
 /* eslint-disable @next/next/no-img-element */
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { RankedListing, ScamSignal } from "@/lib/types";
 import { RiskRing } from "./ListingCard";
 import { peekPhotos } from "./photos";
@@ -19,13 +19,28 @@ function shortLabel(s: ScamSignal) {
   return s.label.replace(/\s*\(".*"\)$/, "").replace(/\s*\(pHash distance \d+\):.*$/, "").replace(/: far too cheap, classic bait price$/, "");
 }
 
-export function XRay({ l, onClose }: { l: RankedListing | null; onClose: () => void }) {
+export function XRay({ l: open, onClose }: { l: RankedListing | null; onClose: () => void }) {
+  // Keep the last listing on screen while the exit animation plays (exit is faster than enter).
+  const [shown, setShown] = useState<RankedListing | null>(open);
+  if (open && open !== shown) setShown(open);
+  const closing = !open && !!shown;
+  const isOpen = !!open;
+  const closeBtn = useRef<HTMLButtonElement | null>(null);
   useEffect(() => {
-    if (!l) return;
+    if (!isOpen) return;
+    const back = document.activeElement as HTMLElement | null;
+    closeBtn.current?.focus({ preventScroll: true });
     const key = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", key);
-    return () => window.removeEventListener("keydown", key);
-  }, [l, onClose]);
+    return () => { window.removeEventListener("keydown", key); back?.focus?.({ preventScroll: true }); };
+  }, [isOpen, onClose]);
+  // Fallback in case animationend never fires (e.g. the tab is hidden).
+  useEffect(() => {
+    if (!closing) return;
+    const t = setTimeout(() => setShown(null), 260);
+    return () => clearTimeout(t);
+  }, [closing]);
+  const l = open ?? shown;
   if (!l) return null;
   const signals = (l.scam.signals ?? []).slice().sort((a, b) => b.w - a.w);
   const total = signals.reduce((a, s) => a + s.w, 0);
@@ -34,16 +49,16 @@ export function XRay({ l, onClose }: { l: RankedListing | null; onClose: () => v
   const body = l.body?.trim() || "No description on the listing.";
   const img = l.images?.[0] ?? peekPhotos(l.url)?.[0];
   return (
-    <div className="xr-back" onClick={onClose}>
+    <div className={`xr-back${closing ? " out" : ""}`} onClick={closing ? undefined : onClose} onAnimationEnd={(e) => { if (closing && e.target === e.currentTarget) setShown(null); }}>
       <div className={`xr ${l.scam.light}`} role="dialog" aria-modal="true" aria-label="Scam analysis" onClick={(e) => e.stopPropagation()}>
         <header className="xr-head">
           <RiskRing score={l.scam.score} light={l.scam.light} size={64} />
           <div className="xr-t">
             <p className={`xr-verdict ${l.scam.light}`}>{VERDICT[l.scam.light]}</p>
             <h3>{l.title.replace(/^\[DEMO DATA\]\s*/, "")}</h3>
-            <p className="xr-sub">${l.priceMonthly?.toLocaleString("en-US") ?? "?"}/mo in {l.neighborhood ?? l.hood ?? "San Francisco"}</p>
+            <p className="xr-sub"><b>${l.priceMonthly?.toLocaleString("en-US") ?? "?"}</b>/mo in <span className="xr-hood">{l.neighborhood ?? l.hood ?? "San Francisco"}</span></p>
           </div>
-          <button className="ghost sm" onClick={onClose} aria-label="Close">Close</button>
+          <button ref={closeBtn} className="ghost sm" onClick={onClose} aria-label="Close">Close</button>
         </header>
 
         <div className="xr-grid">
@@ -63,11 +78,11 @@ export function XRay({ l, onClose }: { l: RankedListing | null; onClose: () => v
             <h4>Why it scored {l.scam.score}</h4>
             {signals.length ? <>
               <div className="xr-stack" aria-hidden="true">
-                {signals.map((s, i) => <i key={i} style={{ flexGrow: s.w, animationDelay: `${120 + i * 90}ms` }} />)}
+                {signals.map((s, i) => <i key={i} style={{ flexGrow: s.w, animationDelay: `${100 + Math.min(i, 5) * 40}ms` }} />)}
                 {total < 100 && <b style={{ flexGrow: 100 - total }} />}
               </div>
               <ol className="xr-signals">
-                {signals.map((s, i) => <li key={i} style={{ animationDelay: `${160 + i * 90}ms` }}><b>+{s.w}</b><span>{shortLabel(s)}{s.quote && <q>{s.quote}</q>}</span></li>)}
+                {signals.map((s, i) => <li key={i} style={{ animationDelay: `${120 + Math.min(i, 5) * 40}ms` }}><b>+{s.w}</b><span>{shortLabel(s)}{s.quote && <q>{s.quote}</q>}</span></li>)}
               </ol>
               {total > 100 && <p className="xr-cap">Signals add up to {total}; the score is capped at 100.</p>}
             </> : <p className="xr-none">No scam signals: the price is in market range, there are no risky payment requests and the text and photos are not copied from another listing.</p>}
