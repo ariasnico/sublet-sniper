@@ -7,6 +7,8 @@ import { Toaster, toast } from "sonner";
 import { Bot } from "./Bot";
 import { ListingCard } from "./ui/ListingCard";
 import { Moment, type MomentData } from "./ui/Moment";
+import { CallStage } from "./ui/CallStage";
+import type { LiveCall } from "@/lib/voice";
 import { Inbox, deal } from "./ui/Inbox";
 import { Mission } from "./ui/Mission";
 import type { AutopilotView, CraigslistDraft, NeedsYouItem } from "@/lib/autopilot";
@@ -71,7 +73,7 @@ function mergeCallLists<C extends CallLite>(a: C[] | undefined, b: C[] | undefin
   const out = new Map<string, C>();
   for (const c of [...(a ?? []), ...(b ?? [])]) {
     const o = out.get(c.id);
-    if (!o || (o.status === "calling" && c.status !== "calling") || (o.status === c.status && c.transcript.length > o.transcript.length)) out.set(c.id, c);
+    if (!o || (o.status === "calling" && c.status !== "calling") || (o.status === c.status && c.transcript.length >= o.transcript.length)) out.set(c.id, c); // ties: the newer copy (live chips)
   }
   return [...out.values()];
 }
@@ -211,7 +213,11 @@ export default function Dashboard({ elevenLabsAgentId, user = null }: { elevenLa
   // so we watch the threads themselves, not only this instance's timeline.
   const seen = useRef<Set<string> | null>(null);
   const lastMoment = useRef(0);
+  // While the call stage is up, moments wait: the booking lands mid-call, but VIEWING BOOKED plays after the stage collapses.
+  const staged = useRef(false);
+  const heldMoment = useRef<MomentData | null>(null);
   const fire = useCallback((m: MomentData) => {
+    if (staged.current) { if (heldMoment.current?.kind !== "booked") heldMoment.current = m; return; }
     if (Date.now() - lastMoment.current < 5000) return;
     lastMoment.current = Date.now(); setMoment(m);
   }, []);
@@ -375,9 +381,20 @@ export default function Dashboard({ elevenLabsAgentId, user = null }: { elevenLa
   };
   const endBrowserCall = () => { void elSession.current?.endSession(); };
   const calling = (s?.calls ?? []).some((c) => c.status === "calling");
+  // Call stage: the newest live call takes the stage; it stays until it has played its ending.
+  const [stageId, setStageId] = useState<string | null>(null);
+  const liveCallId = [...(s?.calls ?? [])].reverse().find((c) => c.status === "calling" && Date.now() - Date.parse(c.startedAt) < 15 * 60e3)?.id;
+  useEffect(() => { if (liveCallId && !stageId) { setStageId(liveCallId); staged.current = true; } }, [liveCallId, stageId]);
+  const stageCall = stageId ? (s?.calls ?? []).find((c) => c.id === stageId) as LiveCall | undefined : undefined;
+  const settleStage = useCallback(() => {
+    setStageId(null); staged.current = false;
+    const m = heldMoment.current; heldMoment.current = null;
+    if (m) { lastMoment.current = Date.now(); setMoment(m); }
+    if (window.matchMedia("(max-width: 1000px)").matches) setMobile("inbox");
+  }, []);
   useEffect(() => {
     if (!calling) return;
-    const id = setInterval(() => { void call("/api/voice/status"); }, 3000);
+    const id = setInterval(() => { void call("/api/voice/status"); }, 1500);
     return () => clearInterval(id);
   }, [calling, call]);
   const contact = async (id: string) => { setMobile("chat"); await send(`Contact listing ${id}`).catch(() => undefined); };
@@ -577,6 +594,9 @@ export default function Dashboard({ elevenLabsAgentId, user = null }: { elevenLa
             </div>
           </div>
         </section>
+        {stageCall && <CallStage key={stageCall.id} call={stageCall} onSettled={settleStage}
+          onTakeOver={() => { setMobile("inbox"); document.querySelector(`.th[data-thread="${CSS.escape(stageCall.threadId)}"]`)?.scrollIntoView({ block: "nearest" }); }}
+          onEnd={stageCall.mode === "browser" && browserLive ? endBrowserCall : undefined} />}
       </main>
 
       <nav className="mnav" aria-label="Sections">

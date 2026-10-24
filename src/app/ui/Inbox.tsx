@@ -12,15 +12,17 @@ const ago = (iso: string) => {
 const PAGE_LOAD = typeof window === "undefined" ? "" : new Date().toISOString();
 const reduced = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-type Check = { k: string; state: "ok" | "wait" | "blocked" };
+type Check = { k: string; state: "ok" | "wait" | "blocked" | "resolved" };
 function protocol(t: Thread, l?: RankedListing): Check[] {
   const landlord = t.messages.filter((m) => m.from === "landlord").map((m) => m.text).join("\n");
   const flagged = t.messages.some((m) => m.flagged);
+  // The landlord asked for money, we refused, and they still agreed / booked: handled, not passed and not a live threat.
+  const backedDown = flagged && (t.status === "booked" || !!t.deal?.agreed);
   return [
     { k: !l || l.scam.light === "green" ? "Passed scam check" : `Scam score ${l.scam.score}`, state: !l || l.scam.light === "green" ? "ok" : "blocked" },
     { k: "Live video tour", state: /video (tour|walkthrough|call)|facetime|zoom/i.test(landlord) ? "ok" : "wait" },
     { k: "Leaseholder confirmed", state: /\b(i(?:'m| am) the (owner|leaseholder|tenant on the lease)|my name is on the lease|landlord (approved|approval|is ok)|sublease (addendum|agreement))\b/i.test(landlord) ? "ok" : "wait" },
-    { k: flagged ? "Money request refused" : "No money before viewing", state: flagged ? "blocked" : "ok" },
+    { k: backedDown ? "Deposit refused, landlord backed down" : flagged ? "Money request refused" : "No money before viewing", state: backedDown ? "resolved" : flagged ? "blocked" : "ok" },
     { k: "Viewing booked", state: t.status === "booked" ? "ok" : "wait" },
   ];
 }
@@ -154,20 +156,21 @@ function ThreadCard({ t, listing, call, canCall, onCall, onBrowser, onEnd, brows
   const now = headline(t, d, replying);
   const checks = protocol(t, listing);
   const okN = checks.filter((c) => c.state === "ok").length, blockedN = checks.some((c) => c.state === "blocked");
+  const booked = t.status === "booked" && !blockedN;
   return (
-    <div ref={card} className={`th st-${t.status}${pulse ? " pulse" : ""}`}>
+    <div ref={card} data-thread={t.id} className={`th st-${t.status}${pulse ? " pulse" : ""}`}>
       <div className="th-head">
         <div className="th-title">{t.listingTitle.replace(/^\[DEMO DATA\]\s*/, "")}</div>
         {/* One compact indicator instead of five chips; the status itself is the line below. */}
         <button className={`th-chk ${blockedN ? "blocked" : "ok"}`} aria-expanded={checksOpen} aria-label={`Safety checks: ${okN} of ${checks.length} passed${blockedN ? ", one blocked" : ""}. ${STATUS[t.status] ?? t.status}.`}
-          onClick={() => setChecksOpen(!checksOpen)}><i aria-hidden="true">{blockedN ? "!" : "✓"}</i>{okN}/{checks.length} checks</button>
+          onClick={() => setChecksOpen(!checksOpen)}><i aria-hidden="true">{blockedN ? "!" : "✓"}</i>{booked ? `Booked · ${okN}/${checks.length}` : `${okN}/${checks.length} checks`}</button>
       </div>
       <p key={now.text} className={`th-now ${now.tone}`} aria-live="polite"><i aria-hidden="true" />{now.text}</p>
       {call && <CallBox c={call} />}
       {checksOpen && <ul className="proto" aria-label="Safety checks">
         {/* Keyed by position so a chip keeps its node and cross-fades when its state flips; the dot remounts to replay its tick. */}
         {checks.map((c, i) => <li key={i} className={c.state} style={{ "--i": i } as CSSProperties}>
-          <i key={c.state} aria-hidden="true">{c.state === "ok" ? "✓" : c.state === "blocked" ? "!" : ""}</i>{c.k}</li>)}
+          <i key={c.state} aria-hidden="true">{c.state === "ok" || c.state === "resolved" ? "✓" : c.state === "blocked" ? "!" : ""}</i>{c.k}</li>)}
       </ul>}
       {d && <div className="deal">
         {d.listed && <div className="listed"><span>Listed</span><b>{usd(d.listed)}</b></div>}

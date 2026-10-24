@@ -213,7 +213,8 @@ export async function handleTool(b: Record<string, unknown>): Promise<ToolResult
 }
 
 // ---------------- post-call ----------------
-export interface ElTurn { role?: string; message?: string | null; time_in_call_secs?: number }
+export interface ElTurn { role?: string; message?: string | null; time_in_call_secs?: number;
+  tool_calls?: { tool_name?: string; params_as_json?: string }[]; tool_results?: { tool_name?: string; result_value?: unknown; is_error?: boolean }[] }
 export interface ElConversation {
   conversation_id?: string; status?: string; transcript?: ElTurn[];
   analysis?: { transcript_summary?: string; call_successful?: string; data_collection_results?: Record<string, { value?: unknown }> };
@@ -263,6 +264,117 @@ export function spokenPrices(text: string): number[] {
 const firstSentence = (t: string) => { const x = t.replace(/^The (AI )?agent[^,.]*?(,|\.)\s*/i, "").split(/(?<=\.)\s/)[0] ?? t; return x.length > 140 ? `${x.slice(0, 137)}…` : x; };
 export const stripTags = (t: string) => t.replace(/\[[a-z][a-z \-]{0,24}\]\s*/gi, "").replace(/\s{2,}/g, " ").trim();
 
+// ---------------- live call (the call stage) ----------------
+/**
+ * One beat of the negotiation, derived from the transcript so far: shown inline on the call stage as it happens.
+ * `at` is the transcript line it belongs to; a money request turns from bad to good at `resolvedAt` (the refusal).
+ */
+export interface CallChip { id: string; kind: "money" | "story" | "asked" | "offered" | "countered" | "agreed" | "booked"; label: string; tone: "bad" | "info" | "good"; at: number; resolvedAt?: number; result?: string }
+/** A call record as the stage reads it: chips ride along in the snapshot (extra fields survive JSON). */
+export interface LiveCall extends CallRecord { chips?: CallChip[]; bookedAt?: number; bookedLabel?: string }
+
+const MONEY_ASK: [RegExp, string][] = [[/zelle/i, "Zelle deposit requested"], [/wire|transfer/i, "Wire transfer requested"], [/gift|crypto|p2p/i, "Gift card / crypto requested"], [/money before/i, "Deposit before viewing requested"]];
+const REFUSAL = /\b(no|not|never|doesn't|don't|won't|can't|cannot)\b[^.?!]{0,70}\b(deposit|zelle|wire|payment|money|pay)\b/i;
+const ACCEPT = /\b(works|deal|agreed|agree|sounds good|perfect|ok|okay|fine|sure|yes)\b/i;
+const OFFER = /would you (?:do|take|consider) \$?\s?(\d[\d,]{2,6})|(?:offer|counter)[^$]{0,20}\$\s?(\d[\d,]{2,6})/i;
+
+/** Live chips from a (partial) call transcript: red flags, asked / offered / countered / agreed prices, booking. Pure. */
+export function deriveChips(lines: Pick<ThreadMsg, "from" | "text" | "flagged">[], o: { agreed?: number; viewingStart?: string; bookedAt?: number; bookedLabel?: string } = {}): CallChip[] {
+  const chips: CallChip[] = [];
+  let asked = 0, offered = 0, agreed = 0;
+  const open: CallChip[] = [];
+  const agree = (n: number, at: number) => {
+    if (agreed || !n) return;
+    agreed = n;
+    const saved = asked > n ? asked - n : 0;
+    chips.push({ id: `agreed-${at}`, kind: "agreed", label: `Agreed ${usd(n)}${saved ? ` · saved ${usd(saved)}/mo` : ""}`, tone: "good", at });
+  };
+  lines.forEach((m, i) => {
+    const prices = spokenPrices(m.text);
+    if (m.from === "landlord") {
+      const flags = m.flagged ?? detectRedFlags(m.text);
+      const money = flags.filter((f) => /zelle|wire|transfer|gift|crypto|p2p|money before/i.test(f));
+      if (money.length) {
+        const label = MONEY_ASK.find(([re]) => money.some((f) => re.test(f)))?.[1] ?? "Deposit requested";
+        const c: CallChip = { id: `money-${i}`, kind: "money", label, tone: "bad", at: i };
+        chips.push(c); open.push(c);
+      }
+      if (flags.some((f) => /out of the country/i.test(f))) chips.push({ id: `story-${i}`, kind: "story", label: "Out-of-country story", tone: "bad", at: i });
+      if (agreed || !prices.length) return;
+      // Deposit amounts ride along with the rent ("$3,800 a month ... a $1,000 deposit"): the rent is the largest figure.
+      if (!offered) {
+        const p = Math.max(...prices);
+        if (p !== asked) { asked = p; chips.push({ id: `asked-${i}`, kind: "asked", label: `Asked ${usd(p)}`, tone: "info", at: i }); }
+        return;
+      }
+      if (prices.includes(offered) && ACCEPT.test(m.text) && !prices.some((p) => p > offered)) { agree(offered, i); return; }
+      const counter = prices.filter((p) => p !== offered && p > offered && (!asked || p < asked));
+      if (counter.length) chips.push({ id: `countered-${i}`, kind: "countered", label: `Countered ${usd(Math.min(...counter))}`, tone: "info", at: i });
+      return;
+    }
+    if (m.from !== "agent") return;
+    if (open.length && REFUSAL.test(m.text)) for (const c of open.splice(0)) { c.resolvedAt = i; c.result = "Refused"; c.tone = "good"; }
+    if (agreed || !asked) return;
+    const off = m.text.match(OFFER);
+    if (off) {
+      const n = Number((off[1] ?? off[2]).replace(/,/g, ""));
+      if (n && n !== offered && n < asked) { offered = n; chips.push({ id: `offered-${i}`, kind: "offered", label: `Offered ${usd(n)}`, tone: "info", at: i }); }
+      return;
+    }
+    // "$3,600 a month works." (an agreement), not "Would $3,600 work?" (a question).
+    const p = prices.find((x) => x <= asked);
+    const head = m.text.split(/(?<=[.!?])\s/)[0] ?? m.text;
+    if (p && ACCEPT.test(head) && !head.trim().endsWith("?")) agree(p, i);
+  });
+  const last = Math.max(0, lines.length - 1);
+  if (o.agreed) agree(o.agreed, Math.min(o.bookedAt ?? last, last));
+  if (o.viewingStart || o.bookedLabel) {
+    const at = Math.min(o.bookedAt ?? last, last);
+    chips.push({ id: `booked-${at}`, kind: "booked", label: `Viewing booked ${o.viewingStart ? shortLA(o.viewingStart) : o.bookedLabel}`, tone: "good", at });
+  }
+  return chips;
+}
+
+/** ElevenLabs turns -> call lines (TTS tags stripped, landlord red flags marked), plus where book_viewing succeeded. */
+export function liveLines(callId: string, startedAt: string, turns: ElTurn[]): { lines: ThreadMsg[]; bookedAt?: number; bookedLabel?: string; agreed?: number } {
+  const t0 = Date.parse(startedAt) || Date.now();
+  const lines: ThreadMsg[] = [];
+  let bookedAt: number | undefined, bookedLabel: string | undefined, agreed: number | undefined;
+  for (const x of turns) {
+    for (const tc of x.tool_calls ?? []) {
+      if (tc.tool_name !== "book_viewing") continue;
+      try { const a = Number((JSON.parse(tc.params_as_json ?? "{}") as { agreed_rent?: unknown }).agreed_rent); if (a > 0) agreed = a; } catch { /* not JSON */ }
+    }
+    for (const tr of x.tool_results ?? []) {
+      const v = typeof tr.result_value === "string" ? tr.result_value : "";
+      if (tr.tool_name === "book_viewing" && !tr.is_error && /^(already )?booked/i.test(v)) { bookedAt = Math.max(0, lines.length - 1); bookedLabel = v.match(/booked:\s*([^.]*?)\s+Pacific/i)?.[1]; }
+    }
+    if (typeof x.message !== "string" || !x.message.trim()) continue;
+    const text = stripTags(x.message);
+    if (!text) continue;
+    const from = x.role === "agent" ? "agent" : "landlord";
+    const flagged = from === "landlord" ? detectRedFlags(text) : [];
+    lines.push({ id: `${callId}-${lines.length}`, from, text, at: new Date(t0 + (x.time_in_call_secs ?? 0) * 1000).toISOString(), channel: "call", ...(flagged.length ? { flagged } : {}) });
+  }
+  return { lines, bookedAt, bookedLabel, agreed };
+}
+
+/** Refreshes a live call: its transcript (from ElevenLabs turns when given) and the stage chips. */
+export function refreshLive(call: CallRecord, turns?: ElTurn[]): LiveCall {
+  const live = call as LiveCall;
+  if (turns) {
+    const r = liveLines(call.id, call.startedAt, turns);
+    if (r.lines.length >= call.transcript.length) call.transcript = r.lines;
+    if (r.bookedAt !== undefined) live.bookedAt = r.bookedAt;
+    live.bookedLabel = r.bookedLabel ?? live.bookedLabel;
+    if (r.agreed && r.agreed <= state().profile.maxBudget) call.agreed ??= r.agreed;
+  } else {
+    for (const m of call.transcript) if (m.from === "landlord" && !m.flagged) { const f = detectRedFlags(m.text); if (f.length) m.flagged = f; }
+  }
+  live.chips = deriveChips(call.transcript, { agreed: call.agreed, viewingStart: call.viewingStart, bookedAt: live.bookedAt, bookedLabel: live.bookedLabel });
+  return live;
+}
+
 /** Applies a finished conversation: transcript on the thread (channel "call"), deal, flags, narration, recap email. */
 export async function finishCall(call: CallRecord, c: ElConversation, opts: { recap: boolean } = { recap: true }) {
   const s = state();
@@ -285,6 +397,7 @@ export async function finishCall(call: CallRecord, c: ElConversation, opts: { re
   call.summary = c.analysis?.transcript_summary?.trim() || undefined;
   call.status = landlordTurns.length ? "done" : "no_answer";
   call.endedAt = now();
+  refreshLive(call);
 
   let t = findThread(call.threadId, call.amThreadId);
   if (!t && mailLive()) { await syncThreads(true).catch(() => []); t = findThread(call.threadId, call.amThreadId); }
@@ -336,10 +449,8 @@ export async function pollCalls(): Promise<number> {
       const c = (await el(`/v1/convai/conversations/${encodeURIComponent(call.conversationId)}`)) as ElConversation;
       if (c.status === "done") { await finishCall(call, c, { recap: !process.env.ELEVENLABS_WEBHOOK_SECRET }); changed++; }
       else if (c.status === "failed") { failCall(call, "the call did not connect", "no_answer"); changed++; }
-      else if (c.transcript?.length) {
-        const t0 = Date.parse(call.startedAt) || Date.now();
-        call.transcript = c.transcript.filter((x) => x.message).map((x, i) => ({ id: `${call.id}-${i}`, from: x.role === "agent" ? "agent" : "landlord", text: String(x.message), at: new Date(t0 + (x.time_in_call_secs ?? 0) * 1000).toISOString(), channel: "call" }));
-      }
+      // In flight ("initiated" / "in-progress" / "processing"): the transcript so far feeds the call stage.
+      else if (c.transcript?.length) refreshLive(call, c.transcript);
     } catch { /* keep polling */ }
   }
   return changed;
@@ -394,6 +505,8 @@ export async function runMock(call: CallRecord, vars: Vars, stepMs = 1600) {
     const secs = (Date.now() - t0) / 1000;
     turns.push({ role: turn.from === "agent" ? "agent" : "user", message: text, time_in_call_secs: secs });
     call.transcript.push({ id: `${call.id}-${turns.length - 1}`, from: turn.from, text, at: now(), channel: "call" });
+    if (turn.tool && call.viewingStart) (call as LiveCall).bookedAt = call.transcript.length - 1;
+    refreshLive(call);
     await currentTenant()?.persist().catch(() => {});
   }
   await sleep(stepMs);
