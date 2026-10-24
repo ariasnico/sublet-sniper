@@ -2,11 +2,16 @@ import listSnap from "../../../data/list_snapshot.json";
 import detailSnap from "../../../data/detail_snapshot.json";
 import phash from "../../../data/phash_results.json";
 import type { RawListing } from "../types";
+import { createPool } from "../pool";
 
 type Cat = "sub" | "roo" | "apa";
 const CATS: Cat[] = ["sub", "roo", "apa"];
 export const UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
 const MIN_GAP_MS = 3000;
+// Listing detail pages (photos, body) use their own small pool, independent of the search chain:
+// at most 4 in flight, starts spaced 250 ms apart. Low volume (top results only), still polite.
+const DETAIL_CONCURRENCY = 4;
+const DETAIL_GAP_MS = 250;
 
 export function postId(url: string): string {
   return url.match(/\/([A-Za-z0-9]+)(?:\.html)?$/)?.[1] ?? url;
@@ -82,10 +87,29 @@ export function parseListingPage(html: string, url: string): RawListing {
 }
 
 export async function fetchListingPage(url: string): Promise<RawListing> {
-  return parseListingPage(await politeGet(url), url);
+  return parseListingPage(await fetchDetailHtml(url), url);
 }
 
-// ---- polite live fetching: one request at a time, >=3s apart, 10 min cache ----
+async function get(url: string, timeoutMs = 15000): Promise<string> {
+  const res = await fetch(url, { headers: { "User-Agent": UA, "Accept-Language": "en-US" }, signal: AbortSignal.timeout(timeoutMs) });
+  if (!res.ok) throw new Error(`craigslist ${res.status}`);
+  return res.text();
+}
+
+// ---- detail pages: small parallel pool + 10 min cache that also dedupes concurrent requests ----
+const detailRun = createPool(DETAIL_CONCURRENCY, DETAIL_GAP_MS);
+const pages = new Map<string, { at: number; html: Promise<string> }>();
+export function fetchDetailHtml(url: string): Promise<string> {
+  const hit = pages.get(url);
+  if (hit && Date.now() - hit.at < 10 * 60e3) return hit.html;
+  const entry = { at: Date.now(), html: detailRun(() => get(url, 10000)) };
+  pages.set(url, entry);
+  entry.html.catch(() => { if (pages.get(url) === entry) pages.delete(url); });
+  if (pages.size > 60) pages.delete(pages.keys().next().value!);
+  return entry.html;
+}
+
+// ---- polite search fetching: one request at a time, >=3s apart, 10 min cache ----
 let last = 0;
 let chain: Promise<unknown> = Promise.resolve();
 async function politeGet(url: string): Promise<string> {
@@ -93,9 +117,7 @@ async function politeGet(url: string): Promise<string> {
     const wait = last + MIN_GAP_MS - Date.now();
     if (wait > 0) await new Promise((r) => setTimeout(r, wait));
     last = Date.now();
-    const res = await fetch(url, { headers: { "User-Agent": UA, "Accept-Language": "en-US" }, signal: AbortSignal.timeout(15000) });
-    if (!res.ok) throw new Error(`craigslist ${res.status}`);
-    return res.text();
+    return get(url);
   };
   const p = chain.then(run, run);
   chain = p.catch(() => undefined);
@@ -130,19 +152,17 @@ export async function fetchListings(cats: Cat[] = CATS): Promise<{ rows: RawList
   return { rows, report: { mode: anyLive ? "live" : "snapshot", perCategory: per, fetchedAt: new Date().toISOString() } };
 }
 
-/** Fetch details for up to `max` listings lacking a body (polite, sequential). */
+/** Fetch details for up to `max` listings lacking a body (in parallel through the detail pool). */
 export async function hydrateDetails(rows: RawListing[], max = 4): Promise<number> {
   if (process.env.CRAIGSLIST_LIVE === "0") return 0;
-  let n = 0;
-  for (const r of rows) {
-    if (n >= max) break;
-    if (r.source !== "craigslist" || r.body) continue;
+  const todo = rows.filter((r) => r.source === "craigslist" && !r.body).slice(0, max);
+  const ok = await Promise.all(todo.map(async (r) => {
     try {
-      const d = parseDetailHtml(await politeGet(r.url));
+      const d = parseDetailHtml(await fetchDetailHtml(r.url));
       Object.assign(r, { body: d.body, posted: d.posted, attrs: d.attrs, images: d.images, lat: d.lat ? Number(d.lat) : undefined, lon: d.lon ? Number(d.lon) : undefined });
       details.set(postId(r.url), { ...r, ...d } as never);
-      n++;
-    } catch { break; }
-  }
-  return n;
+      return 1;
+    } catch { return 0; }
+  }));
+  return ok.reduce<number>((a, b) => a + b, 0);
 }

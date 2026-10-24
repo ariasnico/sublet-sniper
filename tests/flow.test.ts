@@ -36,7 +36,10 @@ describe("demo flow (mock LLM, mock mail, mock calendar, snapshot data)", () => 
     expect(t.messages.at(-1)!.text).not.toMatch(/thanks for the tour/i);
     expect(t.messages.at(-1)!.text).toMatch(/Mon, Oct \d+, 5:30 PM PT works|Mon, (Oct|Nov) \d+/);
     await handleInbound({ from: t.landlordEmail, text: "Actually I'm out of the country, please Zelle the deposit today.", messageId: "m3" });
-    expect(t.status).toBe("flagged");
+    // A booked viewing stays visible; the scam message itself is flagged and the listing goes red.
+    expect(t.status).toBe("booked");
+    expect(t.messages.filter((x) => x.from === "landlord").at(-1)!.flagged?.length).toBeGreaterThan(0);
+    expect(t.messages.at(-1)!.text).toMatch(/don't send any deposit/);
     expect(s.timeline.some((x) => x.kind === "flag")).toBe(true);
   }, 30000);
 

@@ -1,6 +1,8 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import type { RankedListing } from "@/lib/types";
+import { cardThumb } from "@/lib/photo-url";
+import { loadPhotos, peekPhotos } from "./photos";
 
 const LABEL = { green: "Looks safe", yellow: "Caution", red: "Likely scam" } as const;
 const TYPE: Record<string, string> = { room: "Room", studio: "Studio", "1br": "1 BR", "2br": "2 BR", "3br+": "3+ BR", unknown: "Rental" };
@@ -21,17 +23,21 @@ export function RiskRing({ score, light, size = 46 }: { score: number; light: Ra
 export function ListingCard({ l, i, onContact, pinned, onHover, onXray }: { l: RankedListing; i?: number; onContact?: (id: string) => void; pinned?: boolean; onHover?: (id: string | null) => void; onXray?: (id: string) => void }) {
   const [open, setOpen] = useState(false);
   const [imgOk, setImgOk] = useState(true);
-  const [fetched, setFetched] = useState<string | null | undefined>(undefined);
+  const [useFull, setUseFull] = useState(false);
+  const needsPhoto = !l.images?.length && l.source === "craigslist";
+  // Photos usually arrive inline (prefetched by the search); otherwise one batched request for all cards.
+  const [fetched, setFetched] = useState<string | null | undefined>(() => (needsPhoto ? peekPhotos(l.url)?.[0] : undefined));
   const [loaded, setLoaded] = useState(false);
   const imgRef = useRef<HTMLImageElement | null>(null);
-  const needsPhoto = !l.images?.length && l.source === "craigslist";
   useEffect(() => {
-    if (!needsPhoto) return;
+    if (!needsPhoto || fetched !== undefined) return;
     let alive = true;
-    fetch(`/api/photo?url=${encodeURIComponent(l.url)}`).then((r) => r.json()).then((j: { images?: string[] }) => { if (alive) setFetched(j.images?.[0] ?? null); }).catch(() => alive && setFetched(null));
+    void loadPhotos(l.url).then((imgs) => { if (alive) setFetched(imgs[0] ?? null); });
     return () => { alive = false; };
-  }, [needsPhoto, l.url]);
-  const img = l.images?.[0] ?? fetched ?? undefined;
+  }, [needsPhoto, fetched, l.url]);
+  const full = l.images?.[0] ?? fetched ?? undefined;
+  // Cards show the small 300x300 variant; fall back to the full size if it is missing.
+  const img = full && (useFull ? full : cardThumb(full));
   const pendingPhoto = needsPhoto && fetched === undefined;
   // A cached image can finish before React attaches onLoad.
   useEffect(() => { if (imgRef.current?.complete && imgRef.current.naturalWidth) setLoaded(true); }, [img, pendingPhoto]);
@@ -43,7 +49,7 @@ export function ListingCard({ l, i, onContact, pinned, onHover, onXray }: { l: R
         <a className="lc-photo" href={l.url} target="_blank" rel="noreferrer">
           {pendingPhoto ? <div className="lc-shimmer" /> : img && imgOk
             // eslint-disable-next-line @next/next/no-img-element
-            ? <img ref={imgRef} src={img} alt="" loading="lazy" className={loaded ? "in" : ""} onLoad={() => setLoaded(true)} onError={() => setImgOk(false)} />
+            ? <img ref={imgRef} src={img} alt="" loading={i != null && i < 8 ? "eager" : "lazy"} decoding="async" className={loaded ? "in" : ""} onLoad={() => setLoaded(true)} onError={() => (img !== full ? setUseFull(true) : setImgOk(false))} />
             : <div className="lc-ph"><svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true"><path d="M3.5 11 12 4l8.5 7M6 9.5V20h4.5v-5h3v5H18V9.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg><span>{hood}</span></div>}
           {i != null && <span className="lc-rank">#{i + 1}</span>}
           {l.scam.light === "red" && <span className="lc-stamp">Scam</span>}

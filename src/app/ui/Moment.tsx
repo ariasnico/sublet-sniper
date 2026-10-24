@@ -1,17 +1,20 @@
 "use client";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 export type MomentData = { kind: "scam"; title: string; detail: string; saved?: number } | { kind: "booked"; title: string; when: string; day: string; month: string };
 
 /** Full-screen beat for the two moments that matter in the demo. Auto-dismisses; click anywhere to close. */
 export function Moment({ m, onDone }: { m: MomentData | null; onDone: () => void }) {
+  // The parent re-renders on every poll; keep the latest onDone without restarting the timer.
+  const done = useRef(onDone);
+  useEffect(() => { done.current = onDone; }, [onDone]);
   useEffect(() => {
     if (!m) return;
-    const id = setTimeout(onDone, m.kind === "scam" ? 3200 : 3600);
-    const key = (e: KeyboardEvent) => { if (e.key === "Escape") onDone(); };
+    const id = setTimeout(() => done.current(), m.kind === "scam" ? 3200 : 3600);
+    const key = (e: KeyboardEvent) => { if (e.key === "Escape") done.current(); };
     window.addEventListener("keydown", key);
     return () => { clearTimeout(id); window.removeEventListener("keydown", key); };
-  }, [m, onDone]);
+  }, [m]);
   if (!m) return null;
   return (
     <div className={`moment ${m.kind}`} onClick={onDone} role="alert">

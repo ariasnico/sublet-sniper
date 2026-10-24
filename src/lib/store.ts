@@ -1,8 +1,9 @@
 import type { Criteria, RankedListing } from "./types";
+import { autopilotView, defaultAutopilot, sanitizeAutopilot, type AutopilotStore } from "./autopilot";
 
 export type TimelineKind = "search" | "scam" | "draft" | "email_out" | "email_in" | "calendar" | "decision" | "flag" | "info";
 export interface TimelineItem { id: string; at: string; kind: TimelineKind; text: string }
-export type ApprovalKind = "send_contact" | "open_craigslist_reply" | "book_viewing" | "decision";
+export type ApprovalKind = "send_contact" | "open_craigslist_reply" | "book_viewing" | "decision" | "autopilot_consent";
 export interface Approval {
   id: string; at: string; kind: ApprovalKind; listingId?: string; title: string; body: string;
   options?: string[]; payload?: Record<string, unknown>; status: "pending" | "approved" | "rejected" | "answered"; answer?: string;
@@ -12,8 +13,13 @@ export interface Thread {
   id: string; listingId: string; listingTitle: string; landlordEmail: string; subject: string;
   messages: ThreadMsg[]; status: "awaiting_landlord" | "active" | "viewing_proposed" | "booked" | "flagged";
   agentmailThreadId?: string; lastMessageId?: string; askedProof: boolean; offeredSlots?: string[];
+  /** Price negotiation: first/highest asked price, our counter, and the agreed price once the landlord accepts. */
+  deal?: { asked: number; offered: number | null; agreed?: number };
+  /** True when autopilot (not a per-message approval) sent the first email. */
+  auto?: boolean;
 }
-export interface ChatMsg { role: "user" | "assistant"; text: string; at: string }
+/** auto: proactive autopilot narration (not a reply to a user message). */
+export interface ChatMsg { role: "user" | "assistant"; text: string; at: string; auto?: boolean }
 export interface RenterProfile {
   name: string; email: string; occupation: string; moveIn: string; moveOut: string; maxBudget: number;
   pets: string; smoker: boolean; references: string; about: string;
@@ -22,6 +28,7 @@ export interface State {
   profile: RenterProfile; criteria: Criteria | null; results: RankedListing[]; flagged: RankedListing[]; analyzedId?: string | null;
   timeline: TimelineItem[]; approvals: Approval[]; threads: Thread[]; chat: ChatMsg[];
   searchReport: { mode: string; total: number; x: number; demo: number; perCategory: Record<string, number | string> } | null; seenMessageIds: string[]; events: { id: string; title: string; start: string; end: string; link?: string }[];
+  autopilot: AutopilotStore;
 }
 
 export function defaultProfile(): RenterProfile {
@@ -36,7 +43,7 @@ export function defaultProfile(): RenterProfile {
 }
 
 function fresh(): State {
-  return { profile: defaultProfile(), criteria: null, results: [], flagged: [], timeline: [], approvals: [], threads: [], chat: [], searchReport: null, seenMessageIds: [], events: [] };
+  return { profile: defaultProfile(), criteria: null, results: [], flagged: [], timeline: [], approvals: [], threads: [], chat: [], searchReport: null, seenMessageIds: [], events: [], autopilot: defaultAutopilot() };
 }
 
 const g = globalThis as unknown as { __sniper?: State };
@@ -61,7 +68,7 @@ export function version(s: Pick<State, "timeline" | "chat">): string {
   return a > b ? a : b;
 }
 
-export type SessionSnapshot = Pick<State, "criteria" | "results" | "flagged" | "timeline" | "approvals" | "chat" | "searchReport" | "events" | "analyzedId">;
+export type SessionSnapshot = Pick<State, "criteria" | "results" | "flagged" | "timeline" | "approvals" | "chat" | "searchReport" | "events" | "analyzedId" | "autopilot">;
 
 /**
  * Serverless: each request may land on a fresh instance. The browser carries the newest session
@@ -74,10 +81,10 @@ export function hydrate(snap: unknown) {
   if (!Array.isArray(x.timeline) || !Array.isArray(x.chat) || !Array.isArray(x.results) || !Array.isArray(x.flagged) || !Array.isArray(x.approvals)) return;
   const s = state();
   if (version({ timeline: x.timeline, chat: x.chat }) <= version(s)) return;
-  Object.assign(s, { criteria: x.criteria ?? null, results: x.results, flagged: x.flagged, timeline: x.timeline.slice(0, 200), approvals: x.approvals.slice(0, 50), chat: x.chat.slice(-60), searchReport: x.searchReport ?? null, events: Array.isArray(x.events) ? x.events : [], analyzedId: x.analyzedId ?? null });
+  Object.assign(s, { criteria: x.criteria ?? null, results: x.results, flagged: x.flagged, timeline: x.timeline.slice(0, 200), approvals: x.approvals.slice(0, 50), chat: x.chat.slice(-60), searchReport: x.searchReport ?? null, events: Array.isArray(x.events) ? x.events : [], analyzedId: x.analyzedId ?? null, autopilot: sanitizeAutopilot(x.autopilot) ?? s.autopilot });
 }
 
 export function publicState() {
   const s = state();
-  return { ...s, seenMessageIds: undefined, version: version(s) };
+  return { ...s, seenMessageIds: undefined, version: version(s), autopilot: autopilotView(s) };
 }

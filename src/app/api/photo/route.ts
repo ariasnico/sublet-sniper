@@ -1,20 +1,13 @@
 import { NextResponse } from "next/server";
-import { fetchListingPage } from "@/lib/sources/craigslist";
+import { listingPhotos } from "@/lib/photos";
+import { isCraigslistUrl } from "@/lib/photo-url";
 
-// Listing photos for cards. The search page has no images, so we read the detail page lazily
-// (same polite, sequential fetcher as search) and let the CDN cache the answer for a day.
-const memo = new Map<string, string[]>();
-
+// Photos for one listing card (the cards use the batched /api/photos). Read through the parallel
+// detail pool, independent of the search chain. The CDN caches answers for a day, failures for 5 min.
 export async function GET(req: Request) {
   const url = new URL(req.url).searchParams.get("url") ?? "";
-  let host = "";
-  try { host = new URL(url).hostname; } catch { /* invalid */ }
-  if (!/(^|\.)craigslist\.org$/.test(host)) return NextResponse.json({ error: "craigslist urls only" }, { status: 400 });
-  let images = memo.get(url);
-  if (!images) {
-    try { images = (await fetchListingPage(url)).images?.slice(0, 4) ?? []; }
-    catch { return NextResponse.json({ images: [] }, { headers: { "cache-control": "public, s-maxage=300" } }); }
-    memo.set(url, images);
-  }
+  if (!isCraigslistUrl(url)) return NextResponse.json({ error: "craigslist urls only" }, { status: 400 });
+  const images = await listingPhotos(url);
+  if (!images) return NextResponse.json({ images: [] }, { headers: { "cache-control": "public, s-maxage=300" } });
   return NextResponse.json({ images }, { headers: { "cache-control": "public, s-maxage=86400, stale-while-revalidate=604800" } });
 }

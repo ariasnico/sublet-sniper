@@ -3,6 +3,7 @@
 import { useEffect, type ReactNode } from "react";
 import type { RankedListing, ScamSignal } from "@/lib/types";
 import { RiskRing } from "./ListingCard";
+import { peekPhotos } from "./photos";
 
 const VERDICT = { green: "Looks safe", yellow: "Be careful with this one", red: "Likely scam. Do not send money." } as const;
 
@@ -31,7 +32,7 @@ export function XRay({ l, onClose }: { l: RankedListing | null; onClose: () => v
   const price = signals.find((s) => s.median);
   const photo = signals.find((s) => s.match);
   const body = l.body?.trim() || "No description on the listing.";
-  const img = l.images?.[0];
+  const img = l.images?.[0] ?? peekPhotos(l.url)?.[0];
   return (
     <div className="xr-back" onClick={onClose}>
       <div className={`xr ${l.scam.light}`} role="dialog" aria-modal="true" aria-label="Scam analysis" onClick={(e) => e.stopPropagation()}>
