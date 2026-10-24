@@ -2,6 +2,7 @@
 import { createElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import Script from "next/script";
+import Link from "next/link";
 import { Toaster, toast } from "sonner";
 import { Bot } from "./Bot";
 import { ListingCard } from "./ui/ListingCard";
@@ -382,7 +383,7 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
       <Moment m={moment} onDone={closeMoment} />
       <XRay l={xray ? mapListings.find((x) => x.id === xray) ?? null : null} onClose={closeXray} />
       <header className="top">
-        <div className="brand"><Bot size={36} className="bot-wave" /><h1>Sublet Sniper<small>your personal rental agent</small></h1></div>
+        <Link className="brand" href="/" aria-label="Sublet Sniper home"><Bot size={36} className="bot-wave" /><h1>Sublet Sniper<small>your personal rental agent</small></h1></Link>
         <span className="grow" />
         <div className="tip-wrap">
           <button className={`ap-toggle${apOn ? " on" : ""}`} role="switch" aria-checked={apOn} aria-describedby="ap-tip" onClick={() => void toggleAutopilot()}>
@@ -399,6 +400,7 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
             {([["LLM", m.llm, m.llm !== "mock"], ["Craigslist", m.craigslist, m.craigslist === "live"], ["Mail", m.mail, m.mail !== "mock"], ["Calendar", m.calendar, m.calendar !== "mock"], ["Voice", m.voice, true]] as [string, string, boolean][])
               .map(([k, v, on]) => <div key={k}><i className={on ? "on" : ""} />{k}<b>{v}</b></div>)}
             {m.agentInbox && <div className="sys-inbox">Agent inbox: {m.agentInbox}</div>}
+            <Link className="sys-link" href="/#agents">Use Sublet Sniper from your AI agent</Link>
             <div className="sys-actions">
               <button className="ghost sm" onClick={() => { void call("/api/mail/poll"); toast("Checking mail…"); }}>Check mail</button>
               <button className="ghost sm" onClick={() => void reset()}>Reset</button>
