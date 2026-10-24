@@ -21,11 +21,15 @@
 | 0:12 | "So I built an agent that rents for you. I just tell it what I want." | Open the app → Continue as guest → click the first suggestion ("Furnished 1BR in SF under $4,000, Nov 1 to Dec 15") | ~770 live listings scanned, scams blocked, photos |
 | 0:25 | "Every listing gets a scam score. This one is too good to be true." | Scams caught → Scam X-ray on a red listing | Price vs SF median, red-flag phrases, signals |
 | 0:40 | "Now I just say: handle it." | Click **Yes, go** | Email sent as you; then the call starts |
-| 0:48 | "It emailed the landlord as me... and now it's calling him." | Answer the iPhone on speaker | Call Stage: live waveform and transcript |
-| 0:55 | (as landlord) **"Yes, it's available. It's $3,800 a month, and I need a $7,600 Zelle deposit today to hold it."** | Let the agent answer | "Zelle refused" chip; agent counters $3,600 |
-| 1:15 | (as landlord) **"OK, no deposit. $3,600 works. Can you do a video tour Monday after 5?"** | Let it confirm, say "Yes", let it hang up | "Agreed $3,600, saved $200/mo", VIEWING BOOKED |
+| 0:48 | "It emailed the landlord as me... and now it's calling him." | Answer the iPhone on speaker, say **"Hello?"** | Call Stage: live waveform and transcript |
+| 0:55 | (as landlord) **"Yes, it's available. It's thirty-eight hundred a month, and I need a one-thousand-dollar Zelle deposit today to hold it."** | Wait for the agent | Agent: no payment before a viewing; counters $3,400 with reasons |
+| 1:05 | (as landlord) **"No deposit, fine. But thirty-four is too low, I have other people. Thirty-seven hundred."** | Wait | Agent: "Meet at $3,600 and he signs right after the video tour?" |
+| 1:15 | (as landlord) **"Okay, thirty-six hundred. I'm the leaseholder, we can do a video tour."** | Wait | Agent confirms $3,600 and proposes Monday at 6 PM |
+| 1:25 | (as landlord) **"Monday six works. Bye."** | Let it book and hang up | "Agreed $3,600, saved $200/mo", VIEWING BOOKED |
 | 1:40 | "It refused the scam move, saved me $200 a month, and booked the viewing. I said one sentence and clicked once." | Point at the booked ticket → Add to calendar | Ticket + mission tracker all done |
 | 1:50 | "And it's agent-native: Claude or ChatGPT can rent through it with one command." | (optional) Landing "For agents" terminal | `claude mcp add ...` + live tool calls |
+
+Landlord rules: never drop the deposit before the agent refuses it; never go below $3,700 until the agent gives a reason; never offer a time (let the agent propose it); one sentence, then wait for the agent to finish.
 
 ## If something fails
 - Phone doesn't ring in ~15 s: say "it's dialing" and continue by email; landlord replies by email work the same (≈15 s each).
