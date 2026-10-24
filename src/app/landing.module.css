@@ -41,6 +41,12 @@
 .header { position: sticky; top: 0; z-index: 20; background: rgba(247,246,243,.78); backdrop-filter: saturate(1.4) blur(12px); border-bottom: 1px solid rgba(28,25,23,.06); }
 .headerInner { max-width: var(--wrap); box-sizing: border-box; margin: 0 auto; height: 64px; padding: 0 var(--gutter); display: flex; align-items: center; gap: 24px; }
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 720; letter-spacing: -0.025em; font-size: 1.0625rem; margin-right: auto; }
+/* over the dark scroll story the header turns dark too (attribute set by ScrollStory) */
+.header { transition: background-color 240ms var(--ease), border-color 240ms var(--ease), color 240ms var(--ease); }
+:global(html[data-story="on"]) .header { background: rgba(19,17,15,.78); border-bottom-color: rgba(255,255,255,.07); color: #F5F3EF; }
+:global(html[data-story="on"]) .nav { color: rgba(245,243,239,.7); }
+:global(html[data-story="on"]) .nav a:hover { color: #fff; }
+:global(html[data-story="on"]) .page .btnSmall { background: var(--orange); }
 .nav { display: none; gap: 26px; font-size: 0.9375rem; font-weight: 500; color: var(--mute); }
 .nav a, .brand { min-height: 44px; display: inline-flex; align-items: center; }
 .nav a:hover { color: var(--ink); }
@@ -85,28 +91,9 @@
   .ctaRow .btn { min-width: 184px; }
 }
 
-/* ── hero cinema ──────────────────────────────
-   Phones/tablets: stacked under the copy, overlapping the sky of the art.
-   Desktop: floats over the illustration, between the copy and the robot. */
 .page .btnHero { min-height: 56px; padding: 0 24px; font-size: 1.125rem; box-shadow: 0 10px 24px -10px rgba(234,88,12,.7), inset 0 1px 0 rgba(255,255,255,.2); }
 .btnHero svg { transition: transform 160ms var(--ease); }
 .btnHero:hover svg { transform: translateX(3px); }
-.cinemaBox { order: -1; position: relative; z-index: 1; padding: 4px var(--gutter) 0; margin-bottom: -96px; }
-.cinema { max-width: 420px; margin: 0 auto; }
-@media (prefers-reduced-motion: no-preference) {
-  .cinema { animation: rise 700ms var(--ease) 150ms both; }
-}
-@keyframes rise { from { opacity: 0; transform: translateY(16px); } }
-@media (min-width: 760px) and (max-width: 1023px) { .cinemaBox { margin-bottom: -180px; } }
-@media (min-width: 1024px) {
-  .cinemaBox { order: 0; position: absolute; top: 0; right: 0; bottom: 0; margin: 0; padding: 0 0 24px; width: min(100%, calc(var(--hero-h) * 1.5));
-    display: flex; align-items: center; pointer-events: none; }
-  .cinema { pointer-events: auto; width: 320px; margin: 0 24px 0 auto; }
-}
-@media (min-width: 1280px) {
-  .cinema { width: 350px; margin: 0 0 0 42.5%; }
-}
-
 /* ── hear it negotiate ──────────────────────── */
 .listen { padding: 36px var(--gutter) 8px; background: var(--paper); }
 .listenInner { max-width: 720px; margin: 0 auto; display: grid; gap: 16px; }
@@ -135,41 +122,6 @@
   .problem { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 64px; align-items: start; }
   .scamList { margin-top: 6px; }
 }
-
-/* ── how it works ───────────────────────────── */
-.steps { list-style: none; margin: 40px auto 0; padding: 0; counter-reset: step; display: grid; gap: 0; }
-.step { counter-increment: step; display: grid; gap: 22px; padding: 36px 0; border-top: 1px solid rgba(28,25,23,.1); position: relative; }
-.step:first-child { border-top: 0; padding-top: 8px; }
-.stepText { display: grid; gap: 8px; align-content: start; }
-.stepText h3 { font-size: 1.375rem; line-height: 1.2; letter-spacing: -0.02em; font-weight: 680; padding-left: 44px; position: relative; }
-.stepText h3::before { content: counter(step); position: absolute; left: 0; top: 0; width: 30px; height: 30px; border-radius: 50%; background: var(--orange); color: #fff; font-size: 0.875rem; font-weight: 700; display: grid; place-items: center; }
-.stepText p { color: var(--mute); font-size: 1.0625rem; max-width: 46ch; padding-left: 44px; }
-.artifact { display: grid; gap: 10px; align-content: center; font-size: 0.9375rem; width: 100%; max-width: 440px; }
-@media (min-width: 760px) {
-  .steps { margin-top: 56px; }
-  .step { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 56px; padding: 44px 0; }
-  .artifact { justify-self: end; }
-  .stepText p { padding-left: 0; }
-  .stepText h3 { padding-left: 0; padding-top: 2px; }
-  .stepText h3::before { left: -48px; top: 1px; }
-  .steps { padding-left: 48px; }
-}
-
-.bubble { justify-self: end; max-width: 360px; background: var(--ink); color: #fff; padding: 12px 16px; border-radius: 18px 18px 4px 18px; line-height: 1.4; }
-.card { background: #fff; border-radius: 14px; padding: 12px 14px; box-shadow: 0 1px 2px rgba(28,25,23,.05), 0 0 0 1px rgba(28,25,23,.08); display: grid; gap: 6px; }
-.cardBad { opacity: .78; }
-.cardBad .cardTop span { text-decoration: line-through; text-decoration-color: rgba(185,28,28,.6); }
-.cardTop { display: flex; justify-content: space-between; gap: 12px; font-weight: 600; }
-.cardTop b { font-variant-numeric: tabular-nums; font-weight: 650; }
-.cardRow { display: flex; align-items: center; gap: 8px; color: var(--mute); font-size: 0.875rem; }
-.dotGreen, .dotRed { width: 9px; height: 9px; border-radius: 50%; background: #22C55E; }
-.dotRed { background: #EF4444; }
-.mail { background: #fff; border-radius: 14px; padding: 14px 16px; box-shadow: 0 1px 2px rgba(28,25,23,.05), 0 0 0 1px rgba(28,25,23,.08); display: grid; gap: 8px; line-height: 1.45; }
-.mailHead { font-size: 0.8125rem; color: var(--faint); font-weight: 600; }
-.cal { display: flex; align-items: center; gap: 14px; background: #fff; border-radius: 14px; padding: 12px 14px; box-shadow: 0 1px 2px rgba(28,25,23,.05), 0 0 0 1px rgba(28,25,23,.08); }
-.cal > div { display: grid; gap: 2px; }
-.cal b { font-weight: 600; } .cal span { color: var(--mute); font-size: 0.875rem; }
-.calDay { flex: none; width: 48px; height: 48px; border-radius: 12px; background: var(--cream); color: var(--orange-deep); font-weight: 700; display: grid; place-items: center; font-size: 0.875rem; }
 
 /* ── agents (dark) ──────────────────────────── */
 .sectionDark { background: var(--ink); color: #F5F3EF; }
