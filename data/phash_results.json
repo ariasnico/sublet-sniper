@@ -1,0 +1,256 @@
+{
+ "hashes": [
+  {
+   "url": "https://images.craigslist.org/00101_loIAioCWZsD_0pO0CI_600x450.jpg",
+   "listing": "https://www.craigslist.org/view/d/san-francisco-private-suite-with/1sFREqXJSjuf7yuutjSiiU",
+   "phash": "f2c3953c8ec5813e",
+   "dhash": "bc99c9c929151c3c",
+   "size": [
+    300,
+    450
+   ]
+  },
+  {
+   "url": "https://images.craigslist.org/00707_4rnai533T4S_0CI0nF_600x450.jpg",
+   "listing": "https://www.craigslist.org/view/d/san-francisco-private-suite-with/1sFREqXJSjuf7yuutjSiiU",
+   "phash": "afbf71650e82d0e0",
+   "dhash": "7f7f7e65677e7f75",
+   "size": [
+    600,
+    366
+   ]
+  },
+  {
+   "url": "https://images.craigslist.org/00B0B_h3zWIweSrHu_0pO0CI_600x450.jpg",
+   "listing": "https://www.craigslist.org/view/d/san-francisco-private-suite-with/1sFREqXJSjuf7yuutjSiiU",
+   "phash": "f886b8c2359ab99a",
+   "dhash": "b1b1b1319191391b",
+   "size": [
+    300,
+    450
+   ]
+  },
+  {
+   "url": "https://images.craigslist.org/00101_jKY1WfU6btG_0CI0t2_600x450.jpg",
+   "listing": "https://www.craigslist.org/view/d/san-francisco-new-large-furnished/9VfTnHRxg4kmJuCNrBu8k3",
+   "phash": "fd8f7a8942665258",
+   "dhash": "2332262616169614",
+   "size": [
+    600,
+    450
+   ]
+  },
+  {
+   "url": "https://images.craigslist.org/00101_kVWdq4AAbDj_0CI0t2_600x450.jpg",
+   "listing": "https://www.craigslist.org/view/d/san-francisco-new-large-furnished/9VfTnHRxg4kmJuCNrBu8k3",
+   "phash": "f74f3a18e63a9098",
+   "dhash": "71436a4ac29a3b8f",
+   "size": [
+    600,
+    450
+   ]
+  },
+  {
+   "url": "https://images.craigslist.org/00707_eeAyeYF2Asj_07K0ak_600x450.jpg",
+   "listing": "https://www.craigslist.org/view/d/san-francisco-new-large-furnished/9VfTnHRxg4kmJuCNrBu8k3",
+   "phash": "c7be782b2a84c457",
+   "dhash": "276764e4c3d3d050",
+   "size": [
+    337,
+    450
+   ]
+  },
+  {
+   "url": "https://images.craigslist.org/00505_fPleNCDq7Y0_0fu0bI_600x450.jpg",
+   "listing": "https://www.craigslist.org/view/d/san-francisco-700-wk-beautiful-bright/78ohNCpnFwS7UBpTQcYKpe",
+   "phash": "d622abd5f6603833",
+   "dhash": "bc6c9d041c304251",
+   "size": [
+    596,
+    450
+   ]
+  },
+  {
+   "url": "https://images.craigslist.org/00707_7ojTlBevBJG_0oc0g8_600x450.jpg",
+   "listing": "https://www.craigslist.org/view/d/san-francisco-700-wk-beautiful-bright/78ohNCpnFwS7UBpTQcYKpe",
+   "phash": "f08bcb30a93a3acd",
+   "dhash": "b7d07d1c1e1c14d0",
+   "size": [
+    600,
+    400
+   ]
+  },
+  {
+   "url": "https://images.craigslist.org/00E0E_iDZrU2w60WI_0ob0g8_600x450.jpg",
+   "listing": "https://www.craigslist.org/view/d/san-francisco-700-wk-beautiful-bright/78ohNCpnFwS7UBpTQcYKpe",
+   "phash": "d7c42aa9e03b59c6",
+   "dhash": "b8b03c9c3c58796d",
+   "size": [
+    600,
+    400
+   ]
+  },
+  {
+   "url": "https://images.craigslist.org/01515_b9c8jLA8vay_0CI0lM_600x450.jpg",
+   "listing": "https://www.craigslist.org/view/d/san-francisco-1br-1ba-sublet-starting/9LhNC3K3y455r5une9Fukk",
+   "phash": "cc277dadbbdd8000",
+   "dhash": "7665e568baa2b2b0",
+   "size": [
+    600,
+    337
+   ]
+  },
+  {
+   "url": "https://images.craigslist.org/00404_360v6spq8xS_07g09G_600x450.jpg",
+   "listing": "https://www.craigslist.org/view/d/san-francisco-lrg-rm-sunny-view-short/jAFL7AC7x2vMjYUQ8izavB",
+   "phash": "850ad87d2af55cd1",
+   "dhash": "3263c64646565ed6",
+   "size": [
+    337,
+    450
+   ]
+  },
+  {
+   "url": "https://images.craigslist.org/00404_4egDngri9mq_0CI0t2_600x450.jpg",
+   "listing": "https://www.craigslist.org/view/d/san-francisco-lrg-rm-sunny-view-short/jAFL7AC7x2vMjYUQ8izavB",
+   "phash": "82e361bc1e1dad2d",
+   "dhash": "98c9caf8f537365a",
+   "size": [
+    600,
+    450
+   ]
+  },
+  {
+   "url": "https://images.craigslist.org/00F0F_j8QW4wAm9D3_0jm0ew_600x450.jpg",
+   "listing": "https://www.craigslist.org/view/d/san-francisco-lrg-rm-sunny-view-short/jAFL7AC7x2vMjYUQ8izavB",
+   "phash": "8abd291e5e2f2516",
+   "dhash": "579686257cf4e19d",
+   "size": [
+    600,
+    450
+   ]
+  },
+  {
+   "url": "https://images.craigslist.org/00D0D_3n7sDjudDDn_09G07g_600x450.jpg",
+   "listing": "https://www.craigslist.org/view/d/san-francisco-lovely-room-in-sf/9xk7vTBze5yHcHmprs7Pc3",
+   "phash": "f48aa679926619c7",
+   "dhash": "3776262c1a12844c",
+   "size": [
+    600,
+    450
+   ]
+  },
+  {
+   "url": "https://images.craigslist.org/00S0S_iLGeMFlCSlY_05r07g_600x450.jpg",
+   "listing": "https://www.craigslist.org/view/d/san-francisco-lovely-room-in-sf/9xk7vTBze5yHcHmprs7Pc3",
+   "phash": "f69d7bc41527a007",
+   "dhash": "0c088dceec8e0d19",
+   "size": [
+    337,
+    450
+   ]
+  },
+  {
+   "url": "https://images.craigslist.org/01111_i4QahMVnj90_09G07g_600x450.jpg",
+   "listing": "https://www.craigslist.org/view/d/san-francisco-lovely-room-in-sf/9xk7vTBze5yHcHmprs7Pc3",
+   "phash": "a9dc8e3198cf3263",
+   "dhash": "f27253529a0a4ae2",
+   "size": [
+    600,
+    450
+   ]
+  },
+  {
+   "url": "https://images.craigslist.org/00D0D_8olvv18nPPb_09G06K_600x450.jpg",
+   "listing": "https://www.craigslist.org/view/d/san-francisco-furnished-private-room/mes4s4zYv5Aa7BMzKNWKmY",
+   "phash": "90e3769e718f2057",
+   "dhash": "8c8cd2dbbcbc7c9c",
+   "size": [
+    600,
+    418
+   ]
+  },
+  {
+   "url": "https://images.craigslist.org/00Z0Z_317oW51vhqL_09G06O_600x450.jpg",
+   "listing": "https://www.craigslist.org/view/d/san-francisco-furnished-private-room/mes4s4zYv5Aa7BMzKNWKmY",
+   "phash": "f4c88adb983334b9",
+   "dhash": "d0a0060c9a8e4c2c",
+   "size": [
+    600,
+    422
+   ]
+  },
+  {
+   "url": "https://images.craigslist.org/01313_6cOvkYIjEvR_09G06J_600x450.jpg",
+   "listing": "https://www.craigslist.org/view/d/san-francisco-furnished-private-room/mes4s4zYv5Aa7BMzKNWKmY",
+   "phash": "e99c720bec815a37",
+   "dhash": "9c9c3b2373d3cf87",
+   "size": [
+    600,
+    417
+   ]
+  },
+  {
+   "url": "https://images.craigslist.org/00B0B_jIxU4E9BwpS_09G07g_600x450.jpg",
+   "listing": "https://www.craigslist.org/view/d/oakland-single-bedroom-available-in/nFSYEWFME9s4RGs9V55Phv",
+   "phash": "b4974ca9b3c931b1",
+   "dhash": "5c541c989e93b317",
+   "size": [
+    600,
+    450
+   ]
+  },
+  {
+   "url": "https://images.craigslist.org/00C0C_33P9EM7gCZ6_09G07g_600x450.jpg",
+   "listing": "https://www.craigslist.org/view/d/oakland-single-bedroom-available-in/nFSYEWFME9s4RGs9V55Phv",
+   "phash": "fe9dd046639c98c2",
+   "dhash": "252b391f4d6d6589",
+   "size": [
+    600,
+    450
+   ]
+  },
+  {
+   "url": "https://images.craigslist.org/00D0D_90TU8u1Y1MF_09G07g_600x450.jpg",
+   "listing": "https://www.craigslist.org/view/d/oakland-single-bedroom-available-in/nFSYEWFME9s4RGs9V55Phv",
+   "phash": "bcd2d52997cb880e",
+   "dhash": "b819a9393b331336",
+   "size": [
+    600,
+    450
+   ]
+  },
+  {
+   "url": "https://images.craigslist.org/00H0H_26lJeawMnTx_0aL063_600x450.jpg",
+   "listing": "https://www.craigslist.org/view/d/san-francisco-large-sunny-room-in-quiet/wryCTTg3rMVDYgcxCFdvnP",
+   "phash": "878792793492d97c",
+   "dhash": "4848484c46f3e86c",
+   "size": [
+    600,
+    337
+   ]
+  },
+  {
+   "url": "https://images.craigslist.org/00J0J_cKyk2X6k3d2_0dm0hH_600x450.jpg",
+   "listing": "https://www.craigslist.org/view/d/san-francisco-large-sunny-room-in-quiet/wryCTTg3rMVDYgcxCFdvnP",
+   "phash": "f6968dc961926536",
+   "dhash": "3e2c2c2c0c020902",
+   "size": [
+    340,
+    450
+   ]
+  },
+  {
+   "url": "https://images.craigslist.org/00c0c_cjNCKS18PJp_0mW0t2_600x450.jpg",
+   "listing": "https://www.craigslist.org/view/d/san-francisco-large-sunny-room-in-quiet/wryCTTg3rMVDYgcxCFdvnP",
+   "phash": "b8c667c38738393c",
+   "dhash": "c8263639381a163e",
+   "size": [
+    355,
+    450
+   ]
+  }
+ ],
+ "near_dup_pairs": [],
+ "resize_recompress_distance": 2
+}

@@ -1,0 +1,36 @@
+{
+ "generated": "2026-10-24 (America/Los_Angeles)",
+ "apartmentlist_live": {
+  "source": "https://www.apartmentlist.com/rent-report/ca/san-francisco",
+  "report": "October 2026",
+  "overall_median": 3878,
+  "1br": 3915,
+  "2br": 4640,
+  "verified_live": true
+ },
+ "zumper": {
+  "source": [
+   "https://www.zumper.com/rent-research/san-francisco-ca",
+   "https://www.zumper.com/rent-research/national-rent-report"
+  ],
+  "studio_avg": 2857,
+  "1br_median_national_report": 4400,
+  "1br_avg_city_page": 4413,
+  "2br_median": 6340,
+  "verified_live": false,
+  "note": "Box gets a bot-challenge page (1.3KB) from zumper.com; figures read via WebFetch earlier today. No per-neighborhood data captured."
+ },
+ "craigslist_derived_live": {
+  "room_median_sfc_roo": 1100,
+  "n_room": 277,
+  "sublet_median_sfc_sub": 2372.5,
+  "n_sub": 104,
+  "note": "asking prices on the list page today; includes weekly prices mislabeled as monthly"
+ },
+ "scam_thresholds_60pct": {
+  "room": 660,
+  "studio": 1714,
+  "1br": 2349,
+  "2br": 2784
+ }
+}
