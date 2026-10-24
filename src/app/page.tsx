@@ -4,7 +4,7 @@ import { getImageProps } from "next/image";
 import { preload } from "react-dom";
 import { Bot } from "./Bot";
 import { CopyButton } from "./landing/CopyButton";
-import { HeroCinema } from "./landing/HeroCinema";
+import { ScrollStory } from "./landing/ScrollStory";
 import { NegotiationPlayer } from "./landing/NegotiationPlayer";
 import { AgentTerminal } from "./landing/AgentTerminal";
 import { RedFlagMarquee } from "./landing/borrowed/RedFlagMarquee";
@@ -107,10 +107,10 @@ export default function Landing() {
               <a href="#agents" className={`${s.btn} ${s.btnGhost}`}>Connect your agent</a>
             </div>
           </div>
-          <div className={s.cinemaBox}>
-            <HeroCinema className={s.cinema} />
-          </div>
         </section>
+
+        {/* ── Scroll story (how it works) ─────────────────── */}
+        <ScrollStory />
 
         {/* ── Hear it negotiate ───────────────────────────── */}
         <section className={s.listen} aria-labelledby="listen-title">
@@ -143,63 +143,6 @@ export default function Landing() {
         </section>
 
         <HaloCards />
-
-        {/* ── How it works ─────────────────────────────────── */}
-        <section id="how" className={`${s.section} ${s.sectionTint}`} aria-labelledby="how-title">
-          <h2 id="how-title" className={s.h2}>How it works</h2>
-          <p className={s.sub}>It does the legwork. You decide.</p>
-          <ol className={s.steps}>
-            <li className={s.step}>
-              <div className={s.stepText}>
-                <h3>Tell it what you need</h3>
-                <p>Voice or text, English or Spanish.</p>
-              </div>
-              <div className={s.artifact}>
-                <div className={s.bubble}>Busco 1BR amoblado en SF, menos de $4,000, del 1/11 al 15/12.</div>
-              </div>
-            </li>
-            <li className={s.step}>
-              <div className={s.stepText}>
-                <h3>It searches live and scores every listing</h3>
-                <p>Price vs. SF medians, Zelle or wire requests, absent owners, reused photos.</p>
-              </div>
-              <div className={s.artifact}>
-                <div className={s.card}>
-                  <div className={s.cardTop}><span>Furnished 1BR near Caltrain</span><b>$3,650</b></div>
-                  <div className={s.cardRow}><i className={s.dotGreen} />Scam risk 8/100</div>
-                </div>
-                <div className={`${s.card} ${s.cardBad}`}>
-                  <div className={s.cardTop}><span>Sunny 1BR on Ortega St</span><b>$1,100</b></div>
-                  <div className={s.cardRow}><i className={s.dotRed} />Scam risk 91/100</div>
-                </div>
-              </div>
-            </li>
-            <li className={s.step}>
-              <div className={s.stepText}>
-                <h3>It calls and emails the landlord</h3>
-                <p>Negotiates the price and refuses any money before a viewing.</p>
-              </div>
-              <div className={s.artifact}>
-                <div className={s.mail}>
-                  <div className={s.mailHead}>Re: Furnished 1BR sublet near Caltrain</div>
-                  <p>Thanks! I&rsquo;d rather not send a deposit before seeing the place. Could we do a quick video tour Monday after 5pm? Also, would you consider $3,800 for the full stay?</p>
-                </div>
-              </div>
-            </li>
-            <li className={s.step}>
-              <div className={s.stepText}>
-                <h3>It books the viewing</h3>
-                <p>A free slot in the landlord&rsquo;s window, on your calendar.</p>
-              </div>
-              <div className={s.artifact}>
-                <div className={s.cal}>
-                  <span className={s.calDay}>Mon</span>
-                  <div><b>Video tour, Furnished 1BR near Caltrain</b><span>5:30 PM, Pacific</span></div>
-                </div>
-              </div>
-            </li>
-          </ol>
-        </section>
 
         <LiveDemos />
 
