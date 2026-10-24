@@ -25,6 +25,25 @@ export function emailAllowed(email: string): boolean {
   return allow.includes(email.trim().toLowerCase());
 }
 
+/** E.164-ish normalization: keeps digits and a leading +; bare 10-digit US numbers get +1. */
+export function normalizePhone(n: string): string {
+  const t = n.trim();
+  const digits = t.replace(/\D/g, "");
+  if (!digits) return "";
+  if (t.startsWith("+")) return `+${digits}`;
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
+  return `+${digits}`;
+}
+
+/** Phone allowlist (same rule as email): only DEMO_LANDLORD_PHONE plus DEMO_ALLOWED_PHONES. Never real landlords. */
+export function phoneAllowed(number: string): boolean {
+  const want = normalizePhone(number);
+  if (!want || want.length < 8) return false;
+  const allow = [process.env.DEMO_LANDLORD_PHONE ?? "", ...(process.env.DEMO_ALLOWED_PHONES ?? "").split(",")].map(normalizePhone).filter((x) => x.length >= 8);
+  return allow.includes(want);
+}
+
 export function firstContact(p: RenterProfile, title: string, price: number | null): { subject: string; text: string } {
   return {
     subject: `[Sublet Sniper demo] ${title.replace(/^\[DEMO DATA\]\s*/, "")}`,

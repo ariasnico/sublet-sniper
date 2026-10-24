@@ -110,6 +110,7 @@ export function milestones(s: State): Milestone[] {
     let firstAgent = true;
     t.messages.forEach((m, i) => {
       const mid = m.id ?? String(i);
+      if (m.channel === "call") return; // phone turns are narrated by voice.ts ("📞 Call done: ...")
       if (!after(m.at, since)) { if (m.from === "agent") firstAgent = false; return; }
       if (m.from === "landlord") {
         const flags = detectRedFlags(stripQuoted(m.text));
@@ -126,7 +127,7 @@ export function milestones(s: State): Milestone[] {
         out.push({ key: `deal:${k}`, text: saved > 0 ? `💸 Saved ${usd(saved)}/mo.` : `🤝 Deal at ${usd(agreed)}/mo.` });
       }
       if (SLOTS.test(m.text)) out.push({ key: `slots:${k}:${mid}`, text: "🗓️ Sent viewing times." });
-      if (BOOKED.test(m.text)) {
+      if (BOOKED.test(m.text) && !/^Thanks for the call!/.test(m.text)) {
         const when = shortWhen(m.text) ?? "";
         if (bookingApproval(s, t)) out.push({ key: `accept:${k}`, text: `✅ Landlord picked ${when || "a time"}. Confirm to book.` });
         else if (t.status === "booked" || process.env.REQUIRE_BOOKING_APPROVAL !== "1") {
