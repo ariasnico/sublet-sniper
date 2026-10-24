@@ -494,20 +494,22 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
               <span>Simulate landlord</span>
               {["hello", "video", "slot", "scam"].map((p) => <button key={p} className="ghost xs" onClick={() => void landlord(p)}>{p}</button>)}</div>}
             <div className="scroll">
-              {/* Once a viewing is booked it is the headline; leftover asks go below it. */}
-              {!events.length && needCards}
+              {/* Once a viewing is booked it is the headline; leftover asks go below it.
+                  Craigslist hand-offs are a side task: they sit under the live threads so the negotiation stays in view. */}
+              {!events.length && needCards.filter((_, i) => needs[i].kind !== "craigslist_replies")}
               {events.map((e) => {
                 const d = new Date(e.start);
                 return <div key={e.id} className="ticket-card">
-                  <div className="cal sm"><span>{d.toLocaleString("en-US", { timeZone: LA, month: "short" })}</span><b>{d.toLocaleString("en-US", { timeZone: LA, day: "numeric" })}</b></div>
-                  <div><div className="tk">Viewing booked</div><div className="tw">{fmtLong(e.start)}</div><div className="tt">{clean(e.title)}</div>
+                  <div className="cal sm" aria-hidden="true"><span>{d.toLocaleString("en-US", { timeZone: LA, month: "short" })}</span><b>{d.toLocaleString("en-US", { timeZone: LA, day: "numeric" })}</b></div>
+                  <div className="tk-body"><div className="tk"><i aria-hidden="true">✓</i>Viewing booked</div><div className="tw">{fmtLong(e.start)}</div><div className="tt">{clean(e.title)}</div>
                     <div className="tn">Pay nothing before you see it.</div>
-                    <div className="tk-actions">{e.link ? <a href={e.link} target="_blank" rel="noreferrer">Open in Google Calendar</a> : <a href={gcalLink(e)} target="_blank" rel="noreferrer">Add to Google Calendar</a>}
+                    <div className="tk-actions">{e.link ? <a className="tk-primary" href={e.link} target="_blank" rel="noreferrer">Open in Google Calendar</a> : <a className="tk-primary" href={gcalLink(e)} target="_blank" rel="noreferrer">Add to Google Calendar</a>}
                       <a href={icsHref(e)} download="viewing.ics">Download .ics</a></div></div>
                 </div>;
               })}
-              {events.length > 0 && needCards}
+              {events.length > 0 && needCards.filter((_, i) => needs[i].kind !== "craigslist_replies")}
               <Inbox threads={threads} listings={mapListings} />
+              {needCards.filter((_, i) => needs[i].kind === "craigslist_replies")}
               {dealsEmpty && <div className="empty deals-empty">
                 <svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true"><path d="M4 6.5h16v11H4z M4 7l8 6 8-6" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" /></svg>
                 <b>No deals yet</b>When your agent emails a landlord, the conversation, the price and the safety checks show up here.</div>}

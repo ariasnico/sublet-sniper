@@ -52,6 +52,8 @@ function Typed({ text, live, onDone }: { text: string; live: boolean; onDone?: (
     const step = Math.max(2, Math.ceil(text.length / 120)); // ~2s regardless of length
     let fired = false;
     const id = setInterval(() => setN((x) => {
+      // Hold the caret while a full-screen moment (SCAM BLOCKED) covers the page, so the reply types where people can see it.
+      if (document.querySelector(".moment")) return x;
       if (x >= text.length) { clearInterval(id); if (!fired) { fired = true; setTimeout(() => done.current?.(), 0); } return x; }
       return Math.min(text.length, x + step);
     }), 16);
@@ -90,11 +92,15 @@ function ThreadCard({ t, listing }: { t: Thread; listing?: RankedListing }) {
   const card = useRef<HTMLDivElement>(null);
   const fresh = useRef(last?.at);
   const [pulse, setPulse] = useState(false);
-  // Keep the newest beat on screen so the presenter never has to scroll. "nearest" means no jump when it already fits.
+  // Keep the newest beat on screen so the presenter never has to scroll: bring the card's bottom into view,
+  // but never scroll the deal bar (the price story) off the top. Only ever scrolls down, never jumps back.
   const reveal = useRef(() => requestAnimationFrame(() => {
-    const el = card.current; if (!el || !el.offsetParent) return;
-    const box = el.closest(".scroll");
-    el.scrollIntoView({ block: box && el.offsetHeight > box.clientHeight ? "end" : "nearest", behavior: reduced() ? "auto" : "smooth" });
+    const el = card.current; const box = el?.closest<HTMLElement>(".scroll");
+    if (!el || !box || !el.offsetParent || box.scrollHeight <= box.clientHeight) return;
+    const top = (n: Element) => n.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop;
+    const anchor = top(el.querySelector(".deal") ?? el) - 8;
+    const want = Math.min(top(el) + el.offsetHeight - box.clientHeight + 4, anchor);
+    if (want > box.scrollTop + 2) box.scrollTo({ top: want, behavior: reduced() ? "auto" : "smooth" });
   })).current;
   useEffect(() => {
     if (last?.at && fresh.current && last.at !== fresh.current) { setPulse(true); reveal(); const id = setTimeout(() => setPulse(false), 1400); fresh.current = last.at; return () => clearTimeout(id); }
