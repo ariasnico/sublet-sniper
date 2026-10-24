@@ -10,6 +10,7 @@ import { Moment, type MomentData } from "./ui/Moment";
 import { Inbox } from "./ui/Inbox";
 import { Mission } from "./ui/Mission";
 import { XRay } from "./ui/XRay";
+import { Rich } from "./ui/Rich";
 import type { Criteria, RankedListing } from "@/lib/types";
 import type { Approval, ChatMsg, Thread, TimelineItem } from "@/lib/store";
 
@@ -175,7 +176,12 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
       else if (t.kind === "search") toast.success("Search done", { description: t.text });
     }
   }, [s]);
-  useEffect(() => { chatEnd.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, [s?.chat.length, busy]);
+  const scrolledOnce = useRef(false);
+  useEffect(() => {
+    if (!s?.chat.length && !busy) return;
+    chatEnd.current?.scrollIntoView({ behavior: scrolledOnce.current ? "smooth" : "auto", block: "end" });
+    scrolledOnce.current = true;
+  }, [s?.chat.length, busy]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const say = (text: string) => {
     if (!speak || typeof window === "undefined" || !("speechSynthesis" in window)) return;
@@ -274,7 +280,7 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
                 <div className="chatline"><span className="avatar"><Bot size={20} /></span><div className="msg assistant">¡Hola Nicolás! Contame qué buscás y yo me encargo: busco, filtro scams, hablo con los dueños y te agendo la visita.</div></div>
                 <div className="chips-col">{CHIPS.map((c) => <button key={c} className="suggest" onClick={() => void send(c)}>{c}</button>)}</div>
               </>}
-              {chat.map((c, i) => <div key={i} className={`chatline ${c.role}`}>{c.role !== "user" && <span className="avatar"><Bot size={20} /></span>}<div className={`msg ${c.role}`}>{c.text}</div></div>)}
+              {chat.map((c, i) => <div key={i} className={`chatline ${c.role}`}>{c.role !== "user" && <span className="avatar"><Bot size={20} /></span>}<div className={`msg ${c.role}`}>{c.role === "assistant" ? <Rich text={c.text} /> : c.text}</div></div>)}
               {typing && <div className="chatline"><span className="avatar"><Bot size={20} /></span><div className="msg assistant typing"><i /><i /><i /></div></div>}
               <div ref={chatEnd} />
             </div>

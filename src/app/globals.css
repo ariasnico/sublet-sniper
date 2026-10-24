@@ -113,7 +113,14 @@ input[type="checkbox"] { width: auto; accent-color: var(--accent); box-shadow: n
 .chatline.user { justify-content: flex-end; }
 .msg { padding: 10px 13px; border-radius: 16px; white-space: pre-wrap; max-width: 86%; font-size: 13.5px; line-height: 1.5; overflow-wrap: anywhere; }
 .msg.user { background: var(--accent); color: #fff; border-bottom-right-radius: 5px; }
-.msg.assistant { background: var(--sunk); border-bottom-left-radius: 5px; }
+.msg.assistant { background: var(--sunk); border-bottom-left-radius: 5px; white-space: normal; }
+.rich > * { margin: 0; } .rich > * + * { margin-top: 8px; }
+.rich ol, .rich ul { padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; counter-reset: n; }
+.rich li { position: relative; padding: 7px 10px 7px 34px; background: #fff; border-radius: 10px; box-shadow: 0 0 0 1px var(--line); line-height: 1.45; }
+.rich ol li { counter-increment: n; }
+.rich ol li::before { content: counter(n); position: absolute; left: 9px; top: 8px; width: 18px; height: 18px; border-radius: 6px; background: var(--accent-soft); color: var(--accent-strong); font-size: 11px; font-weight: 750; display: grid; place-items: center; }
+.rich ul li::before { content: ""; position: absolute; left: 15px; top: 15px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+.rich .money { font-weight: 700; font-variant-numeric: tabular-nums; }
 .chips-col { display: flex; flex-direction: column; gap: 8px; margin: 6px 0 0 38px; }
 .suggest { text-align: left; font-weight: 450; font-size: 13px; color: var(--accent-strong); background: var(--accent-soft); box-shadow: 0 0 0 1px rgba(249,115,22,.22); border-radius: 12px; }
 @media (hover: hover) and (pointer: fine) { .suggest:hover:not(:disabled) { background: #FFEAD5; } }
