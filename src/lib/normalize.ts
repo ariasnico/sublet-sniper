@@ -69,7 +69,7 @@ export function toMonthly(price: number | null, period: PricePeriod, nights?: nu
     case "month": return price;
     case "week": return Math.round((price * 52) / 12);
     case "night": return Math.round(price * 30);
-    case "total": return nights && nights > 0 ? Math.round((price / nights) * 30) : price;
+    case "total": return nights && nights >= 14 ? Math.round((price / nights) * 30) : price;
     default: { const never: never = period; return never; }
   }
 }

@@ -80,7 +80,7 @@ export function scoreScam(l: Listing, ctx: ScamContext): ScamResult {
     for (const o of ctx.corpus) {
       if (o.id === l.id || !o.body) continue;
       const j = jaccard(mine, shingles(`${o.title} ${o.body}`));
-      if (j >= 0.35) { add(30, `description ${Math.round(j * 100)}% identical to another listing (${o.source}: "${o.title.slice(0, 50)}")`); break; }
+      if (j >= 0.35) { add(20, `description ${Math.round(j * 100)}% identical to another listing (${o.source}: "${o.title.slice(0, 50)}")`); break; }
     }
   }
   // 5. Duplicate photos (perceptual hash, Hamming <= 6) across different listings
@@ -89,7 +89,7 @@ export function scoreScam(l: Listing, ctx: ScamContext): ScamResult {
       if (o.id === l.id || !o.imageHashes?.length) continue;
       for (const a of l.imageHashes) for (const b of o.imageHashes) {
         const d = hamming(a, b);
-        if (d <= 6) { add(30, `photo matches another listing's photo (pHash distance ${d}): "${o.title.slice(0, 50)}"`); break outer; }
+        if (d <= 6) { add(20, `photo matches another listing's photo (pHash distance ${d}): "${o.title.slice(0, 50)}"`); break outer; }
       }
     }
   }
