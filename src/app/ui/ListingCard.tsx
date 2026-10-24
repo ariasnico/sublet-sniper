@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { RankedListing } from "@/lib/types";
 
 const LABEL = { green: "Looks safe", yellow: "Caution", red: "Likely scam" } as const;
@@ -23,6 +23,7 @@ export function ListingCard({ l, i, onContact, pinned, onHover, onXray }: { l: R
   const [imgOk, setImgOk] = useState(true);
   const [fetched, setFetched] = useState<string | null | undefined>(undefined);
   const [loaded, setLoaded] = useState(false);
+  const imgRef = useRef<HTMLImageElement | null>(null);
   const needsPhoto = !l.images?.length && l.source === "craigslist";
   useEffect(() => {
     if (!needsPhoto) return;
@@ -32,6 +33,8 @@ export function ListingCard({ l, i, onContact, pinned, onHover, onXray }: { l: R
   }, [needsPhoto, l.url]);
   const img = l.images?.[0] ?? fetched ?? undefined;
   const pendingPhoto = needsPhoto && fetched === undefined;
+  // A cached image can finish before React attaches onLoad.
+  useEffect(() => { if (imgRef.current?.complete && imgRef.current.naturalWidth) setLoaded(true); }, [img, pendingPhoto]);
   const hood = l.neighborhood ?? l.hood ?? "San Francisco";
   return (
     <article className={`lc ${l.scam.light}${pinned ? " pinned" : ""}`} onMouseEnter={() => onHover?.(l.id)} onMouseLeave={() => onHover?.(null)}>
@@ -40,7 +43,7 @@ export function ListingCard({ l, i, onContact, pinned, onHover, onXray }: { l: R
         <a className="lc-photo" href={l.url} target="_blank" rel="noreferrer">
           {pendingPhoto ? <div className="lc-shimmer" /> : img && imgOk
             // eslint-disable-next-line @next/next/no-img-element
-            ? <img src={img} alt="" loading="lazy" className={loaded ? "in" : ""} onLoad={() => setLoaded(true)} onError={() => setImgOk(false)} />
+            ? <img ref={imgRef} src={img} alt="" loading="lazy" className={loaded ? "in" : ""} onLoad={() => setLoaded(true)} onError={() => setImgOk(false)} />
             : <div className="lc-ph"><svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true"><path d="M3.5 11 12 4l8.5 7M6 9.5V20h4.5v-5h3v5H18V9.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg><span>{hood}</span></div>}
           {i != null && <span className="lc-rank">#{i + 1}</span>}
           {l.scam.light === "red" && <span className="lc-stamp">SCAM</span>}

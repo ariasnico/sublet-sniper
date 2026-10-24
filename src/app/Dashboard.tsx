@@ -17,7 +17,7 @@ const MapView = dynamic(() => import("./ui/MapView"), { ssr: false, loading: () 
 
 interface Modes { llm: string; mail: string; calendar: string; craigslist: string; voice: string; agentInbox: string }
 interface S { version?: string; analyzedId?: string | null; criteria?: Criteria | null; results: RankedListing[]; flagged: RankedListing[]; timeline: TimelineItem[]; approvals: Approval[]; threads: Thread[]; chat: ChatMsg[];
-  events: { id: string; title: string; start: string; link?: string }[]; modes: Modes; searchReport: { mode: string; total: number } | null }
+  events: { id: string; title: string; start: string; end?: string; link?: string }[]; modes: Modes; searchReport: { mode: string; total: number } | null }
 
 interface SR { lang: string; interimResults: boolean; onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null; onend: (() => void) | null; start(): void; stop(): void }
 type SRCtor = new () => SR;
@@ -335,7 +335,9 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
                 return <div key={e.id} className="ticket-card">
                   <div className="cal sm"><span>{d.toLocaleString("en-US", { timeZone: LA, month: "short" })}</span><b>{d.toLocaleString("en-US", { timeZone: LA, day: "numeric" })}</b></div>
                   <div><div className="tk">Viewing booked</div><div className="tw">{fmtLong(e.start)}</div><div className="tt">{e.title.replace(/^Viewing: /, "").replace(/^\[DEMO DATA\]\s*/, "")}</div>
-                    {e.link ? <a href={e.link} target="_blank" rel="noreferrer">Open in Google Calendar</a> : <div className="tn">On your calendar. Pay nothing before you see it.</div>}</div>
+                    <div className="tn">Pay nothing before you see it.</div>
+                    <div className="tk-actions">{e.link ? <a href={e.link} target="_blank" rel="noreferrer">Open in Google Calendar</a> : <a href={gcalLink(e)} target="_blank" rel="noreferrer">Add to Google Calendar</a>}
+                      <a href={icsHref(e)} download="viewing.ics">Download .ics</a></div></div>
                 </div>;
               })}
             </div>
@@ -369,6 +371,19 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
       </nav>
     </>
   );
+}
+
+const gcalStamp = (iso: string) => new Date(iso).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+const endOf = (e: { start: string; end?: string }) => e.end ?? new Date(new Date(e.start).getTime() + 45 * 60e3).toISOString();
+const NOTE = "Booked by Sublet Sniper. Pay nothing before you see the place in person.";
+function gcalLink(e: { title: string; start: string; end?: string }) {
+  const q = new URLSearchParams({ action: "TEMPLATE", text: e.title.replace(/\[DEMO DATA\]\s*/, ""), dates: `${gcalStamp(e.start)}/${gcalStamp(endOf(e))}`, details: NOTE, ctz: LA });
+  return `https://calendar.google.com/calendar/render?${q}`;
+}
+function icsHref(e: { id: string; title: string; start: string; end?: string }) {
+  const ics = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Sublet Sniper//EN", "BEGIN:VEVENT", `UID:${e.id}@sublet-sniper`, `DTSTAMP:${gcalStamp(new Date().toISOString())}`,
+    `DTSTART:${gcalStamp(e.start)}`, `DTEND:${gcalStamp(endOf(e))}`, `SUMMARY:${e.title.replace(/\[DEMO DATA\]\s*/, "")}`, `DESCRIPTION:${NOTE}`, "END:VEVENT", "END:VCALENDAR"].join("\r\n");
+  return `data:text/calendar;charset=utf-8,${encodeURIComponent(ics)}`;
 }
 
 function bookedMoment(title: string, startIso: string): MomentData {
