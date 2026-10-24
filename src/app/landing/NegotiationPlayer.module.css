@@ -1,0 +1,52 @@
+.player {
+  --ease: cubic-bezier(0.23, 1, 0.32, 1);
+  display: flex; gap: 18px; align-items: flex-start; width: 100%; box-sizing: border-box; padding: 20px; border-radius: 22px;
+  background: #fff; box-shadow: 0 0 0 1px rgba(28, 25, 23, 0.07), 0 2px 4px rgba(28, 25, 23, 0.04), 0 18px 40px -16px rgba(124, 45, 18, 0.22);
+  text-align: left;
+}
+.play { flex: none; width: 60px; height: 60px; border-radius: 50%; border: 0; cursor: pointer; display: grid; place-items: center; color: #fff;
+  background: #F97316; box-shadow: 0 8px 20px -6px rgba(234, 88, 12, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  transition: transform 160ms var(--ease), background-color 160ms var(--ease); }
+.play:hover { background: #EA580C; }
+.play:active { transform: scale(0.95); }
+.play svg { transform: translateX(1px); }
+.player[data-playing] .play svg { transform: none; }
+
+.body { flex: 1; min-width: 0; display: grid; gap: 10px; }
+.meta { display: flex; align-items: center; gap: 10px; font-size: 13px; min-height: 22px; }
+.who { font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; font-size: 12px; color: #78716C; }
+.who[data-who="Sniper"] { color: #C2410C; }
+.tag { margin-left: auto; font-size: 11.5px; font-weight: 650; color: #78716C; background: #F1EEE8; padding: 3px 8px; border-radius: 999px; }
+.time { font-variant-numeric: tabular-nums; color: #8A837C; font-weight: 550; }
+
+.bars { display: inline-flex; align-items: center; gap: 2px; height: 16px; }
+.bars i { width: 3px; height: 100%; border-radius: 2px; background: #D6D3D1; transform: scaleY(0.25); transition: transform 200ms var(--ease); }
+.bars[data-who="Sniper"] i { background: #F97316; }
+.bars[data-who="Landlord"] i { background: #A8A29E; }
+.bars[data-on] i { animation: eq 480ms ease-in-out infinite alternate; animation-delay: calc(var(--i) * -110ms); }
+.bars[data-on] i:nth-child(2n) { animation-duration: 380ms; }
+@keyframes eq { from { transform: scaleY(0.2); } to { transform: scaleY(1); } }
+
+.captions { display: grid; }
+.caption { grid-area: 1 / 1; margin: 0; font-size: 1.0625rem; line-height: 1.5; color: #1C1917; letter-spacing: -0.005em;
+  opacity: 0; transform: translateY(4px); transition: opacity 220ms var(--ease), transform 220ms var(--ease); }
+.caption[data-on] { opacity: 1; transform: none; }
+.captions[data-idle] .caption { color: #8A837C; }
+
+.track { position: relative; height: 4px; border-radius: 2px; background: #F1EEE8; overflow: hidden; }
+.track i { position: absolute; top: 0; bottom: 0; background: #E7E2DA; }
+.track b { position: absolute; inset: 0; background: #F97316; transform-origin: 0 50%; transform: scaleX(0); }
+
+@media (max-width: 559px) {
+  /* play button + meta on one row, caption and track full width below */
+  .player { display: grid; grid-template-columns: 52px minmax(0, 1fr); padding: 16px; gap: 12px 14px; align-items: center; }
+  .body { display: contents; }
+  .captions, .track { grid-column: 1 / -1; }
+  .play { width: 52px; height: 52px; }
+  .time { display: none; }
+  .caption { font-size: 1rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bars[data-on] i { animation: none; transform: scaleY(0.7); }
+  .caption, .play { transition: none; }
+}
