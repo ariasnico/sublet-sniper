@@ -7,7 +7,8 @@ import { Bot } from "./Bot";
 import { ListingCard } from "./ui/ListingCard";
 import { Moment, type MomentData } from "./ui/Moment";
 import { Inbox, deal } from "./ui/Inbox";
-import { Mission, type Autopilot } from "./ui/Mission";
+import { Mission } from "./ui/Mission";
+import type { AutopilotView, CraigslistDraft, NeedsYouItem } from "@/lib/autopilot";
 import { XRay } from "./ui/XRay";
 import { Rich } from "./ui/Rich";
 import type { Criteria, RankedListing } from "@/lib/types";
@@ -17,7 +18,27 @@ const MapView = dynamic(() => import("./ui/MapView"), { ssr: false, loading: () 
 
 interface Modes { llm: string; mail: string; calendar: string; craigslist: string; voice: string; agentInbox: string }
 interface S { version?: string; analyzedId?: string | null; criteria?: Criteria | null; results: RankedListing[]; flagged: RankedListing[]; timeline: TimelineItem[]; approvals: Approval[]; threads: Thread[]; chat: ChatMsg[];
-  events: { id: string; title: string; start: string; end?: string; link?: string }[]; modes: Modes; searchReport: { mode: string; total: number } | null; autopilot?: Autopilot }
+  events: { id: string; title: string; start: string; end?: string; link?: string }[]; modes: Modes; searchReport: { mode: string; total: number } | null; autopilot?: Partial<AutopilotView> }
+
+/** One "needs you" card: from s.autopilot.needsYou when the backend reports it, else built from pending approvals. */
+type Need = { key: string; kind: NeedsYouItem["kind"]; approvalId?: string; title: string; body?: string; options?: string[]; items?: CraigslistDraft[] };
+const NEED_KIND: Record<string, NeedsYouItem["kind"]> = { autopilot_consent: "autopilot_consent", book_viewing: "confirm_booking", send_contact: "approve_send", decision: "decision" };
+function needsOf(s: S | null, pending: Approval[]): Need[] {
+  const ny = s?.autopilot?.needsYou;
+  if (Array.isArray(ny)) return ny.map((n) => n.kind === "craigslist_replies"
+    ? { key: `cl:${n.approvalIds.join(",")}`, kind: n.kind, title: n.title, body: n.body, items: n.items }
+    : { key: n.approvalId, kind: n.kind, approvalId: n.approvalId, title: n.title, body: "body" in n ? n.body : undefined, options: "options" in n ? n.options : undefined });
+  const out: Need[] = [];
+  const cl = pending.filter((a) => a.kind === "open_craigslist_reply");
+  for (const a of pending) {
+    if (a.kind === "open_craigslist_reply") continue;
+    out.push({ key: a.id, kind: NEED_KIND[a.kind] ?? "decision", approvalId: a.id, title: a.title, body: a.body || undefined, options: a.options });
+  }
+  if (cl.length) out.push({ key: `cl:${cl.map((a) => a.id).join(",")}`, kind: "craigslist_replies", title: "", items: cl.map((a) => ({ approvalId: a.id, listingId: a.listingId, title: a.title, url: String(a.payload?.url ?? ""), message: a.body })) });
+  return out.sort((a, b) => Number(b.kind === "autopilot_consent") - Number(a.kind === "autopilot_consent"));
+}
+/** Autopilot stage to the step that is live on the track. */
+const STAGE_STEP: Record<string, string> = { consent: "Contact", outreach: "Contact", waiting: "Negotiate", negotiating: "Negotiate", scheduling: "Book" };
 
 interface SR { lang: string; interimResults: boolean; continuous?: boolean; onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }> & { isFinal: boolean }> }) => void) | null; onend: (() => void) | null; start(): void; stop(): void }
 type SRCtor = new () => SR;
@@ -156,6 +177,7 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
   const threads = useMemo(() => (s?.threads ?? []).filter((t) => !resetAt || t.messages.some((x) => x.at > resetAt)), [s?.threads, resetAt]);
   const pending = useMemo(() => (s?.approvals ?? []).filter((a) => a.status === "pending")
     .sort((a, b) => Number(kindOf(b) === "autopilot_consent") - Number(kindOf(a) === "autopilot_consent")), [s?.approvals]);
+  const needs = useMemo(() => needsOf(s, pending), [s, pending]);
 
   // Moments: fire once per new scam refusal / booking. Mail can be processed on another instance (webhook),
   // so we watch the threads themselves, not only this instance's timeline.
@@ -193,16 +215,18 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
   const seenNeeds = useRef<Set<string> | null>(null);
   useEffect(() => {
     if (!s) return;
-    if (!seenNeeds.current) { seenNeeds.current = new Set(pending.map((a) => a.id)); return; }
+    const ids = (n: Need) => n.approvalId ? [n.approvalId] : (n.items ?? []).map((x) => x.approvalId);
+    if (!seenNeeds.current) { seenNeeds.current = new Set(needs.flatMap(ids)); return; }
     let fresh = false;
-    for (const a of pending) {
-      if (seenNeeds.current.has(a.id)) continue;
-      seenNeeds.current.add(a.id); fresh = true;
-      toast.warning("Your agent needs you", { description: needCopy(a).title });
+    for (const n of needs) {
+      const nu = ids(n).filter((id) => !seenNeeds.current!.has(id));
+      if (!nu.length) continue;
+      nu.forEach((id) => seenNeeds.current!.add(id)); fresh = true;
+      toast.warning("Your agent needs you", { description: needCopy(n).title });
     }
     // On a phone, jump straight to the card that needs a tap.
     if (fresh && window.matchMedia("(max-width: 1000px)").matches) setMobile("inbox");
-  }, [s, pending]);
+  }, [s, needs]);
 
   // A pasted link that scores risky opens its X-ray right away.
   const lastAnalyzed = useRef<string | null | undefined>(undefined);
@@ -291,12 +315,12 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
     if (ok && approval?.kind === "send_contact") setMobile("inbox");
     void refresh();
   };
-  const openAndPaste = (a: Approval) => {
-    void navigator.clipboard?.writeText(a.body).catch(() => undefined);
-    const url = typeof a.payload?.url === "string" ? a.payload.url : null;
-    if (url) window.open(url, "_blank", "noopener");
+  // The one human step: copy the drafted message, open the real listing (in the click, so popup blockers allow it), mark it taken.
+  const openAndPaste = (d: CraigslistDraft) => {
+    void navigator.clipboard?.writeText(d.message).catch(() => undefined);
+    if (d.url) window.open(d.url, "_blank", "noopener");
     toast.success("Message copied", { description: "Click Reply on Craigslist and paste it." });
-    void approve(a.id, true, undefined, !!url);
+    void approve(d.approvalId, true, undefined, !!d.url);
   };
   const contact = async (id: string) => { setMobile("chat"); await send(`Contactá el listing ${id}`).catch(() => undefined); };
   const landlord = async (preset: string) => { const r = await post<{ error?: string }>("/api/demo/landlord", { preset }); if (r.error) toast.error(r.error); void refresh(); };
@@ -331,15 +355,25 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
     return { blocked, minutes };
   }, [scanned, s?.flagged, s?.events, threads]);
   const derived = deriveNowNext(s, threads, pending, busy && !searching, apOn);
-  const nowNext = s?.autopilot && !busy ? { now: s.autopilot.now || derived.now, next: s.autopilot.next || derived.next } : derived;
+  // The backend narrates Now/Next while autopilot runs; with autopilot paused, the per-step view is more useful.
+  const ap = s?.autopilot;
+  const fromBackend = !!ap?.now && !busy && ap.stage !== "paused";
+  const nowNext = fromBackend ? { now: ap!.now!, next: ap!.next || derived.next } : derived;
+  const stage = fromBackend && ap?.stage ? STAGE_STEP[ap.stage] : undefined;
+  const savedPerMonth = ap?.stats?.savedPerMonth ?? 0;
   const liveModes = m ? [m.llm !== "mock" && "OpenAI", m.craigslist === "live" && "Craigslist", m.mail !== "mock" && "AgentMail", m.calendar !== "mock" && "Calendar"].filter(Boolean) as string[] : [];
   const list = tab === "ranked" ? s?.results ?? [] : s?.flagged ?? [];
   const mapListings = useMemo(() => [...(s?.results ?? []), ...(s?.flagged ?? [])], [s?.results, s?.flagged]);
   const hasResults = (s?.results.length ?? 0) + (s?.flagged.length ?? 0) > 0;
   const chat = s?.chat ?? [];
-  const consent = pending.find((a) => kindOf(a) === "autopilot_consent");
+  const consent = needs.find((n) => n.kind === "autopilot_consent");
   const events = s?.events ?? [];
-  const dealsEmpty = !pending.length && !events.length && !threads.length;
+  const dealsEmpty = !needs.length && !events.length && !threads.length;
+  const needCount = needs.reduce((n, x) => n + (x.items?.length ?? 1), 0);
+  const listingOf = (approvalId?: string, listingId?: string) => {
+    const lid = listingId ?? s?.approvals.find((a) => a.id === approvalId)?.listingId;
+    return lid ? mapListings.find((l) => l.id === lid) : undefined;
+  };
 
   return (
     <>
@@ -375,7 +409,7 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
 
       <Mission criteria={s?.criteria} scanned={scanned} shown={s?.results.length ?? 0} flagged={s?.flagged.length ?? 0} threads={threads}
         booked={events.length > 0 || threads.some((t) => t.status === "booked")} searching={searching}
-        now={nowNext.now} next={nowNext.next} stage={s?.autopilot?.stage} blocked={stats.blocked} minutes={stats.minutes} />
+        now={nowNext.now} next={nowNext.next} stage={stage} blocked={stats.blocked} minutes={stats.minutes} />
       <main className="grid" data-m={mobile}>
         <section className="col col-chat">
           <div className="panel chat">
@@ -385,9 +419,10 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
                 <div className="chatline"><span className="avatar"><Bot size={20} /></span><div className="msg assistant">¡Hola Nicolás! Contame qué buscás y yo me encargo: busco, filtro scams, hablo con los dueños y te agendo la visita.</div></div>
                 <div className="chips-col">{CHIPS.map((c) => <button key={c} className="suggest" onClick={() => void send(c)}>{c}</button>)}</div>
               </>}
-              {chat.map((c, i) => <div key={i} className={`chatline ${c.role}`}>{c.role !== "user" && <span className="avatar"><Bot size={20} /></span>}<div className={`msg ${c.role}`}>{c.role === "assistant" ? <Rich text={c.text} /> : c.text}</div></div>)}
-              {consent && !typing && <div className="chat-cta">
-                {(consent.options?.length ? consent.options : CONSENT).map((o, k) => <button key={o} className={k === 0 ? "primary sm" : "ghost sm"} onClick={() => void approve(consent.id, true, o)}>{o}</button>)}
+              {chat.map((c, i) => <div key={i} className={`chatline ${c.role}${c.auto ? " auto" : ""}`}>{c.role !== "user" && <span className="avatar"><Bot size={20} /></span>}
+                <div className={`msg ${c.role}`}>{c.auto && <span className="auto-k"><i aria-hidden="true" />Autopilot update</span>}{c.role === "assistant" ? <Rich text={c.text} /> : c.text}</div></div>)}
+              {consent?.approvalId && !typing && <div className="chat-cta">
+                {(consent.options?.length ? consent.options : CONSENT).map((o, k) => <button key={o} className={k === 0 ? "primary sm" : "ghost sm"} onClick={() => void approve(consent.approvalId!, true, o)}>{o}</button>)}
               </div>}
               {typing && <div className="chatline"><span className="avatar"><Bot size={20} /></span><div className="msg assistant typing"><i /><i /><i /></div></div>}
               <div ref={chatEnd} />
@@ -445,12 +480,14 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
         <section className="col col-inbox">
           <div className="panel side">
             <div className="ph"><div><h2>Deals in progress</h2><small>Each landlord your agent is talking to, as you</small></div>
-              <span className="grow" />{pending.length > 0 && <span className="badge" title="Needs you">{pending.length}</span>}</div>
+              <span className="grow" />
+              {savedPerMonth > 0 && <span className="saved-pill" title="Negotiated off the asking rent">Saving you ${savedPerMonth.toLocaleString("en-US")}/mo</span>}
+              {needCount > 0 && <span className="badge" title="Needs you">{needCount}</span>}</div>
             {demo && threads.length > 0 && <div className="sim">
               <span>Simulate landlord</span>
               {["hello", "video", "slot", "scam"].map((p) => <button key={p} className="ghost xs" onClick={() => void landlord(p)}>{p}</button>)}</div>}
             <div className="scroll">
-              {pending.map((a) => <NeedCard key={a.id} a={a} listing={mapListings.find((l) => l.id === a.listingId)} onApprove={(ok, ans) => void approve(a.id, ok, ans)} onPaste={() => openAndPaste(a)} />)}
+              {needs.map((n) => <NeedCard key={n.key} n={n} listingOf={listingOf} onApprove={(id, ok, ans) => void approve(id, ok, ans)} onPaste={openAndPaste} />)}
               {events.map((e) => {
                 const d = new Date(e.start);
                 return <div key={e.id} className="ticket-card">
@@ -473,43 +510,55 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
       <nav className="mnav" aria-label="Sections">
         <button className={mobile === "chat" ? "on" : ""} onClick={() => setMobile("chat")}>Agent</button>
         <button className={mobile === "homes" ? "on" : ""} onClick={() => setMobile("homes")}>Places{hasResults && <span>{s?.results.length}</span>}</button>
-        <button className={mobile === "inbox" ? "on" : ""} onClick={() => setMobile("inbox")} aria-label={pending.length ? `Deals, ${pending.length} need you` : "Deals"}>
-          Deals{pending.length > 0 ? <span className="hot">{pending.length}</span> : threads.length > 0 && <span>{threads.length}</span>}</button>
+        <button className={mobile === "inbox" ? "on" : ""} onClick={() => setMobile("inbox")} aria-label={needCount ? `Deals, ${needCount} need you` : "Deals"}>
+          Deals{needCount > 0 ? <span className="hot">{needCount}</span> : threads.length > 0 && <span>{threads.length}</span>}</button>
       </nav>
     </>
   );
 }
 
-function needCopy(a: Approval): { title: string; body?: string; draft?: string } {
-  switch (kindOf(a)) {
+function needCopy(n: Need): { title: string; body?: string; draft?: string } {
+  switch (n.kind) {
     case "autopilot_consent": return { title: "Let me handle it end to end?", body: "I'll email safe landlords as you, negotiate under your budget, refuse any money before a viewing and book the first slot that fits." };
-    case "open_craigslist_reply": return { title: "Click Reply on Craigslist", body: "I wrote the message and copied it. Craigslist only lets a human click Reply.", draft: a.body };
-    case "send_contact": return { title: "OK to email this landlord as you?", draft: a.body };
-    case "book_viewing": return { title: "Book this viewing?", body: a.body };
-    default: return { title: a.title, body: a.body || undefined };
+    case "craigslist_replies": return { title: "Click Reply on Craigslist", body: "I wrote the message and copied it. Craigslist only lets a human click Reply." };
+    case "approve_send": return { title: "OK to email this landlord as you?", draft: n.body };
+    case "confirm_booking": return { title: "Book this viewing?", body: n.body };
+    default: return { title: n.title, body: n.body };
   }
 }
 
-function NeedCard({ a, listing, onApprove, onPaste }: { a: Approval; listing?: RankedListing; onApprove: (ok: boolean, answer?: string) => void; onPaste: () => void }) {
-  const k = kindOf(a);
-  const c = needCopy(a);
+function Draft({ text, hidden = false }: { text: string; hidden?: boolean }) {
   const [open, setOpen] = useState(false);
+  return <>
+    {(!hidden || open) && <pre className={open ? "" : "clamp"}>{text}</pre>}
+    <button className="th-more" onClick={() => setOpen(!open)}>{open ? "Show less" : hidden ? "Preview the message" : "Read the full message"}</button>
+  </>;
+}
+
+function NeedCard({ n, listingOf, onApprove, onPaste }: { n: Need; listingOf: (approvalId?: string, listingId?: string) => RankedListing | undefined; onApprove: (id: string, ok: boolean, answer?: string) => void; onPaste: (d: CraigslistDraft) => void }) {
+  const c = needCopy(n);
+  const listing = n.approvalId ? listingOf(n.approvalId) : undefined;
+  const id = n.approvalId;
+  const choices = (opts: string[]) => opts.map((o, i) => <button key={o} className={i === 0 ? "primary sm" : "ghost sm"} onClick={() => id && onApprove(id, true, o)}>{o}</button>);
   return (
-    <div className={`ap need k-${k}`}>
+    <div className={`ap need k-${n.kind}`}>
       <div className="ap-who"><span className="avatar sm"><Bot size={16} /></span>Your agent needs you{listing && <em>{short(listing.title, 44)}</em>}</div>
       <div className="ap-t">{c.title}</div>
       {c.body && <p className="ap-b">{c.body}</p>}
-      {c.draft && <>
-        <pre className={open ? "" : "clamp"}>{c.draft}</pre>
-        <button className="th-more" onClick={() => setOpen(!open)}>{open ? "Show less" : "Read the full message"}</button>
-      </>}
-      <div className="ap-actions">
-        {k === "autopilot_consent" ? (a.options?.length ? a.options : CONSENT).map((o, i) => <button key={o} className={i === 0 ? "primary sm" : "ghost sm"} onClick={() => onApprove(true, o)}>{o}</button>)
-          : k === "open_craigslist_reply" ? <><button className="primary sm" onClick={onPaste}>Open listing & paste</button><button className="ghost sm" onClick={() => onApprove(false)}>Skip this one</button></>
-          : k === "decision" ? (a.options ?? ["Yes", "No"]).map((o, i) => <button key={o} className={i === 0 ? "primary sm" : "ghost sm"} onClick={() => onApprove(true, o)}>{o}</button>)
-          : <><button className="primary sm" onClick={() => onApprove(true)}>{k === "send_contact" ? "Approve & send" : k === "book_viewing" ? "Book it" : "Approve"}</button>
-            <button className="ghost sm" onClick={() => onApprove(false)}>Not now</button></>}
-      </div>
+      {c.draft && <Draft text={c.draft} />}
+      {n.kind === "craigslist_replies" ? <ul className="cl-items">
+        {(n.items ?? []).map((d) => { const l = listingOf(d.approvalId, d.listingId); return (
+          <li key={d.approvalId}>
+            <div className="cl-t">{l ? short(l.title, 60) : "Craigslist listing"}{l?.priceMonthly ? <span>${l.priceMonthly.toLocaleString("en-US")}/mo</span> : null}</div>
+            <Draft text={d.message} hidden />
+            <div className="ap-actions"><button className="primary sm" onClick={() => onPaste(d)}>Open listing & paste</button><button className="ghost sm" onClick={() => onApprove(d.approvalId, false)}>Skip this one</button></div>
+          </li>); })}
+      </ul> : <div className="ap-actions">
+        {n.kind === "autopilot_consent" ? choices(n.options?.length ? n.options : CONSENT)
+          : n.kind === "decision" ? choices(n.options?.length ? n.options : ["Yes", "No"])
+          : <><button className="primary sm" onClick={() => id && onApprove(id, true)}>{n.kind === "approve_send" ? "Approve & send" : n.kind === "confirm_booking" ? "Book it" : "Approve"}</button>
+            <button className="ghost sm" onClick={() => id && onApprove(id, false)}>Not now</button></>}
+      </div>}
     </div>
   );
 }

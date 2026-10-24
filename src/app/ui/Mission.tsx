@@ -7,7 +7,6 @@ import { useCountUp } from "./Stats";
 const TYPE: Record<string, string> = { room: "Room", studio: "Studio", "1br": "1BR", "2br": "2BR", "3br+": "3BR+" };
 const day = (iso: string) => new Date(`${iso}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 
-export interface Autopilot { on: boolean; now: string; next: string; stage?: string }
 export interface MissionInput {
   criteria: Criteria | null | undefined; scanned: number; shown: number; flagged: number; threads: Thread[]; booked: boolean; searching: boolean;
   now: string; next: string; stage?: string; blocked: number; minutes: number;
@@ -76,8 +75,8 @@ export function Mission({ criteria: c, scanned, shown, flagged, threads, booked,
         </ol>
       </div>
       <div className="mission-live" aria-live="polite">
-        <div className="nn now"><span className="nn-dot" aria-hidden="true" /><span className="nn-k">Now</span><span key={nowText} className="nn-v">{nowText}</span></div>
-        {!searching && next && <div className="nn next"><span className="nn-k">Next</span><span key={next} className="nn-v">{next}</span></div>}
+        <div className="nn now"><span className="nn-dot" aria-hidden="true" /><span className="nn-k">Now</span><span key={nowText} className="nn-v" title={nowText}>{nowText}</span></div>
+        {!searching && next && <div className="nn next"><span className="nn-k">Next</span><span key={next} className="nn-v" title={next}>{next}</span></div>}
         <span className="grow" />
         {scanned > 0 && <div className="mstats">
           <span><Num v={scanned} f={int} /> scanned</span>

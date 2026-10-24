@@ -272,6 +272,16 @@ input[type="checkbox"] { width: auto; accent-color: var(--accent); box-shadow: n
 .ap .th-more { margin-bottom: 8px; background: transparent; color: var(--accent-strong); font-weight: 600; }
 .ap-who > :not(em) { flex: none; } .ap-who { white-space: nowrap; }
 .ap-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.cl-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.cl-items li { padding: 10px; border-radius: 12px; background: #fff; box-shadow: 0 0 0 1px var(--line); }
+.cl-t { display: flex; gap: 8px; justify-content: space-between; font-size: 13px; font-weight: 650; margin-bottom: 2px; }
+.cl-items .th-more { margin: 0 0 6px; }
+.cl-t span { flex: none; color: var(--mute); font-weight: 600; font-variant-numeric: tabular-nums; }
+.cl-items pre { background: var(--sunk); box-shadow: none; }
+.saved-pill { font-size: 12px; font-weight: 700; color: var(--green); background: var(--green-soft); padding: 4px 10px; border-radius: 999px; font-variant-numeric: tabular-nums; animation: enter 260ms var(--ease-out) both; }
+.chatline.auto .msg.assistant { background: #fff; box-shadow: 0 0 0 1px rgba(249,115,22,.25); }
+.auto-k { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 650; color: var(--accent-strong); margin-bottom: 4px; }
+.auto-k i { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
 .deals-empty svg { color: var(--faint); opacity: .7; margin-bottom: 6px; }
 .deals-empty { max-width: 300px; margin: 0 auto; padding-top: 48px; }
 .ticket-card { display: flex; gap: 14px; align-items: center; padding: 14px; border-radius: 14px; background: linear-gradient(135deg, var(--green-soft), #fff); box-shadow: 0 0 0 1px var(--green-line), var(--shadow-sm); margin-bottom: 10px; animation: enter 260ms var(--ease-out) both; }
