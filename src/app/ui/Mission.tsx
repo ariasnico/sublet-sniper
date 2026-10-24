@@ -47,8 +47,9 @@ const STEPS = ["Search", "Vet", "Contact", "Negotiate", "Book"] as const;
  *  and the five steps as small dots (labels on hover). Counts live once, in the booked card's receipt. */
 export function StatusBar({ label, detail, tone, scanned, flagged, threads, booked, searching, stage }: StatusInput) {
   const contacted = threads.length > 0;
-  const replied = threads.some((t) => t.messages.some((m) => m.from === "landlord"));
-  const done = [scanned > 0, scanned > 0, contacted, replied, booked];
+  // Negotiate is done once a price or a viewing is settled, not at the first reply.
+  const settled = threads.some((t) => !!t.deal?.agreed || t.status === "viewing_proposed" || t.status === "booked");
+  const done = [scanned > 0, scanned > 0, contacted, settled, booked];
   // A later step implies the earlier ones (a booked viewing means we searched and contacted).
   const last = done.lastIndexOf(true);
   done.forEach((_, i) => { if (i < last) done[i] = true; });

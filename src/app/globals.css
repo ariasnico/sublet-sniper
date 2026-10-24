@@ -1264,7 +1264,7 @@ a.hx-title:hover { text-decoration: none; color: var(--accent-strong); }
 .hx-steps li.ok i { background: var(--green-dot); color: #fff; box-shadow: none; animation: tick 240ms var(--ease-out) both; }
 .hx-steps li.guard i { background: var(--red-dot); color: #fff; box-shadow: none; animation: tick 240ms var(--ease-out) both; }
 .hx-steps li.guard { color: var(--red); }
-.hx-steps li.now { color: var(--text); } .hx-steps li.now i { box-shadow: inset 0 0 0 2px var(--accent); animation: pulse-o 1.6s var(--ease-out) infinite; }
+.hx-steps li.now { color: var(--text); } .hx-steps li.now i { box-shadow: inset 0 0 0 1.5px var(--accent); background: radial-gradient(circle, var(--accent) 0 3px, transparent 3.5px); }
 .hx-steps li span { animation: swap-in 220ms var(--ease-out) both; }
 .app .hx-more { align-self: center; flex: none; padding: 6px 12px; font-size: 12.5px; border-radius: 9px; color: var(--mute); background: transparent; box-shadow: 0 0 0 1px var(--line-strong); }
 
@@ -1402,3 +1402,7 @@ a.hx-title:hover { text-decoration: none; color: var(--accent-strong); }
   .sbar.t-live .sbar-dot, .hx-live, .act-dot.live, .hx-steps li.now i, .hx-steps li.ok i, .hx-steps li.guard i { animation: none !important; }
   .sdots li::after { transition: opacity 120ms ease; }
 }
+.home-pane .ap-who em, .m-hero .ap-who em { margin-left: 0; color: var(--mute); font-weight: 600; }
+/* Until the first state arrives, keep the columns invisible (no flash of the empty state on reload). */
+.grid > .col { transition: opacity 200ms var(--ease-out); }
+.grid[data-loading] > .col { opacity: 0; }

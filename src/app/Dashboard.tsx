@@ -12,7 +12,7 @@ import type { LiveCall } from "@/lib/voice";
 import { deal } from "./ui/Inbox";
 import { StatusBar, type StatusInput } from "./ui/Mission";
 import { Activity, callOf, lastAt } from "./ui/Activity";
-import { BookedHero, MatchHero, MatchRow, WorkHero } from "./ui/Hero";
+import { BookedHero, MatchHero, MatchRow, WorkHero, shortTitle } from "./ui/Hero";
 import type { AutopilotView, CraigslistDraft, NeedsYouItem } from "@/lib/autopilot";
 import { XRay } from "./ui/XRay";
 import { ChatThread } from "./ui/chat/ChatThread";
@@ -510,6 +510,8 @@ export default function Dashboard({ elevenLabsAgentId, user = null }: { elevenLa
         saved={bookedDeal?.offered && bookedDeal.asked > bookedDeal.offered ? bookedDeal.asked - bookedDeal.offered : undefined} />
     : ui === "booked" && bookedThread ? <WorkHero t={bookedThread} l={listingOf(undefined, bookedThread.listingId)} call={callOf(bookedThread, calls)} onOpen={() => openDeal(bookedThread.id)} />
     : null;
+  // A pending "Email this landlord?" already names the place: it stands in for the #1 card.
+  const heroShown = ui === "results" && homeNeeds.length ? null : hero;
 
   const nSafe = s?.results.length ?? 0, nScam = s?.flagged.length ?? 0;
   const fullList = <>
@@ -569,9 +571,9 @@ export default function Dashboard({ elevenLabsAgentId, user = null }: { elevenLa
       </header>
 
       {ui !== "empty" && <StatusBar {...status} scanned={scanned} flagged={nScam} threads={threads} booked={ui === "booked"} searching={searching} stage={stage} />}
-      <main className={`grid${ui === "empty" ? " solo" : ""}`} data-m={mobile} data-ui={ui}>
+      <main className={`grid${ui === "empty" ? " solo" : ""}`} data-m={mobile} data-ui={ui} data-loading={s ? undefined : ""}>
         <section className="col col-chat">
-          {narrow && ui !== "empty" && <div className="m-hero">{needCards}{hero}</div>}
+          {narrow && ui !== "empty" && <div className="m-hero">{needCards}{heroShown}</div>}
           <div className="panel chat">
             <div className="scroll chat-scroll">
               <ChatThread chat={chat} greeting={GREETING} typing={typing} idle={!busy && !listening}
@@ -616,7 +618,7 @@ export default function Dashboard({ elevenLabsAgentId, user = null }: { elevenLa
             </div>
           ) : (
             <div className="home-pane">
-              {!narrow && <>{needCards}{hero}</>}
+              {!narrow && <>{needCards}{heroShown}</>}
               {hasResults && (listOpen ? <div className="panel homes">{fullList}</div> : collapsed)}
             </div>
           )}
@@ -644,7 +646,8 @@ function needCopy(n: Need): { title: string; body?: string; draft?: string } {
     case "craigslist_replies": return { title: "Reply on Craigslist" };
     case "approve_send": return { title: "Email this landlord?", draft: n.body };
     case "confirm_booking": return { title: "Book this viewing?", body: n.body };
-    default: return { title: n.title, body: n.body };
+    // Backend questions quote the whole listing title and a reason in parentheses; the card already names the place.
+    default: { const t = n.title.replace(/"[^"]*"\s*/g, "").replace(/\s*\([^)]*\)/g, "").trim(); return { title: t ? t[0].toUpperCase() + t.slice(1) : n.title, body: n.body }; }
   }
 }
 
@@ -685,10 +688,10 @@ function NeedCard({ n, listingOf, onApprove, onPaste }: { n: Need; listingOf: (a
   }
   return (
     <div className={`ap need k-${n.kind}`}>
-      <div className="ap-who" aria-label="Your agent needs you"><span className="avatar sm"><Bot size={16} /></span>Needs you{listing && <em>{short(listing.title, 44)}</em>}</div>
+      <div className="ap-who" aria-label="Your agent needs you"><span className="avatar sm"><Bot size={16} /></span>{listing && <em>{shortTitle(listing.title)}</em>}</div>
       <div className="ap-t">{c.title}</div>
       {c.body && <p className="ap-b">{c.body}</p>}
-      {c.draft && <Draft text={c.draft} />}
+      {c.draft && <Draft text={c.draft} hidden />}
       <div className="ap-actions">
         {n.kind === "autopilot_consent" ? choices(n.options?.length ? n.options : CONSENT)
           : n.kind === "decision" ? choices(n.options?.length ? n.options : ["Yes", "No"])

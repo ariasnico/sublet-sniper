@@ -80,7 +80,7 @@ export function WorkHero({ t, l, call, onOpen }: { t: Thread; l?: RankedListing;
   return <article className="hero hx-work" aria-label="Deal in progress">
     <Photo l={l} />
     <div className="hx-body">
-      <span className="hx-k"><i className="hx-live" aria-hidden="true" />Working on it</span>
+      {/* The status bar already says what the agent is doing; the hero shows where. */}
       <div className="hx-title" title={cleanTitle(t.listingTitle)}>{shortTitle(t.listingTitle)}</div>
       <ol className="hx-steps">{steps.map((s, i) => <li key={i} className={s.state} style={{ "--i": i } as React.CSSProperties}>
         <i aria-hidden="true">{s.state === "ok" || s.state === "guard" ? "✓" : ""}</i><span key={s.k}>{s.k}</span></li>)}</ol>
