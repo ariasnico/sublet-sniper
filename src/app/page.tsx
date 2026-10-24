@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getImageProps } from "next/image";
+import { preload } from "react-dom";
 import { Bot } from "./Bot";
 import { CopyButton } from "./landing/CopyButton";
 import s from "./landing.module.css";
@@ -38,16 +39,25 @@ const SCAMS: Array<{ quote: string; tell: string }> = [
   { quote: "1BR furnished, Ortega St, $1,100/mo, all utilities included.", tell: "Price far below the SF median for its type. Photos reused from another listing." },
 ];
 
+// Art direction: square-ish crop on phones, 3:2 scene from 760px. From 1024px the
+// scene is anchored right at its natural ratio, capped by the hero height (860 * 1.5).
+const HERO_MOBILE_MEDIA = "(max-width: 759px)";
+const HERO_DESKTOP_MEDIA = "(min-width: 760px)";
+const HERO_DESKTOP_SIZES = "(min-width: 1024px) min(100vw, 1290px), 100vw";
+
 function HeroPicture() {
   const common = { alt: "A friendly orange robot holds up a house key on a sunny San Francisco hill, with Victorian houses and two crossed-out listings behind it", priority: true };
-  const { props: desktop } = getImageProps({ ...common, width: 1536, height: 1024, src: "/landing/hero.webp", sizes: "(min-width: 760px) 100vw, 1px" });
-  const { props: mobile } = getImageProps({ ...common, width: 900, height: 838, src: "/landing/hero-mobile.webp", sizes: "(max-width: 759px) 100vw, 1px" });
+  const { props: desktop } = getImageProps({ ...common, width: 1536, height: 1024, src: "/landing/hero.webp", sizes: HERO_DESKTOP_SIZES });
+  const { props: mobile } = getImageProps({ ...common, width: 900, height: 838, src: "/landing/hero-mobile.webp", sizes: "100vw" });
+  // getImageProps does not emit a preload; add one per breakpoint so the LCP image starts with the HTML.
+  preload(mobile.src, { as: "image", imageSrcSet: mobile.srcSet, imageSizes: "100vw", media: HERO_MOBILE_MEDIA, fetchPriority: "high" });
+  preload(desktop.src, { as: "image", imageSrcSet: desktop.srcSet, imageSizes: HERO_DESKTOP_SIZES, media: HERO_DESKTOP_MEDIA, fetchPriority: "high" });
   return (
     <picture className={s.heroPic}>
-      <source media="(max-width: 759px)" srcSet={mobile.srcSet} sizes="100vw" />
-      <source media="(min-width: 760px)" srcSet={desktop.srcSet} sizes="100vw" />
+      <source media={HERO_MOBILE_MEDIA} srcSet={mobile.srcSet} sizes="100vw" />
+      <source media={HERO_DESKTOP_MEDIA} srcSet={desktop.srcSet} sizes={HERO_DESKTOP_SIZES} />
       {/* eslint-disable-next-line jsx-a11y/alt-text -- alt comes from the spread props */}
-      <img {...desktop} sizes="100vw" fetchPriority="high" />
+      <img {...desktop} fetchPriority="high" />
     </picture>
   );
 }
@@ -95,7 +105,7 @@ export default function Landing() {
         <section className={s.section} aria-labelledby="problem-title">
           <div className={s.problem}>
             <div className={s.problemText}>
-              <h2 id="problem-title" className={s.h2}>Finding a short-term place in SF is a part-time job.</h2>
+              <h2 id="problem-title" className={s.h2}>Finding a short‑term place in SF is a&nbsp;part‑time job.</h2>
               <p>
                 Hours scrolling Craigslist. Landlords who never write back. And a steady stream of fake listings:
                 the owner is conveniently abroad, the photos belong to someone else, and the deposit has to go out
@@ -103,7 +113,7 @@ export default function Landing() {
               </p>
               <p className={s.stat}>
                 Scams and ghosting were the most common complaints in the SF renter threads we read before building this.
-                Every one of the messages on the right is a pattern the Scam X-ray catches.
+                Every one of these messages is a pattern the Scam X‑ray catches.
               </p>
             </div>
             <ul className={s.scamList} aria-label="Examples of listings the Scam X-ray blocks">
