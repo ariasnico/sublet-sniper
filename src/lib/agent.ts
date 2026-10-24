@@ -59,7 +59,7 @@ export async function chat(text: string): Promise<string> {
   const history: Turn[] = s.chat.slice(-12).map((m) => ({ role: m.role, text: m.text }));
   let reply: string | null = null;
   try {
-    const ctx = s.results.length ? `\n\nCurrent results: ${JSON.stringify(s.results.slice(0, 8).map(brief))}` : "";
+    const ctx = (s.results.length ? `\n\nCurrent results (#1..): ${JSON.stringify(s.results.slice(0, 8).map(brief))}` : "") + (s.flagged.length ? `\n\nRed-flagged listings (hidden from results, explain them with score_scam): ${JSON.stringify(s.flagged.slice(0, 4).map(brief))}` : "");
     reply = await runToolLoop(SYSTEM() + ctx, history, TOOL_DEFS, execTool);
   } catch (e) {
     log("info", `LLM error, using offline agent: ${(e as Error).message.slice(0, 120)}`);
