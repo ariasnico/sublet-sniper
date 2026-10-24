@@ -1,5 +1,6 @@
 import type { Criteria, RankedListing } from "./types";
 import { autopilotView, defaultAutopilot, sanitizeAutopilot, type AutopilotStore } from "./autopilot";
+import { currentTenant } from "./tenant-ctx";
 
 export type TimelineKind = "search" | "scam" | "draft" | "email_out" | "email_in" | "calendar" | "decision" | "flag" | "info" | "call";
 export interface TimelineItem { id: string; at: string; kind: TimelineKind; text: string }
@@ -53,13 +54,21 @@ export function defaultProfile(): RenterProfile {
   };
 }
 
-function fresh(): State {
+export function fresh(): State {
   return { profile: defaultProfile(), criteria: null, results: [], flagged: [], timeline: [], approvals: [], threads: [], chat: [], searchReport: null, seenMessageIds: [], events: [], autopilot: defaultAutopilot(), calls: [] };
 }
 
 const g = globalThis as unknown as { __sniper?: State };
-export function state(): State { return (g.__sniper ??= fresh()); }
-export function resetState() { g.__sniper = fresh(); epoch.bornAt = new Date().toISOString(); }
+/** The current tenant's State (per request, see tenant.ts); the global in-memory state without a tenant (tests, MCP). */
+export function state(): State {
+  const t = currentTenant();
+  return t ? t.state : (g.__sniper ??= fresh());
+}
+export function resetState() {
+  const t = currentTenant();
+  if (t) { t.state = fresh(); t.bornAt = new Date().toISOString(); return; }
+  g.__sniper = fresh(); epoch.bornAt = new Date().toISOString();
+}
 
 /**
  * Serverless: Reset only reaches one instance. The browser sends the time of its last Reset with every
@@ -68,11 +77,14 @@ export function resetState() { g.__sniper = fresh(); epoch.bornAt = new Date().t
 const epoch = (globalThis as unknown as { __sniperEpoch?: { bornAt: string } }).__sniperEpoch ??= { bornAt: "" };
 (globalThis as unknown as { __sniperEpoch?: { bornAt: string } }).__sniperEpoch = epoch;
 /** Start of the current session (last Reset seen by this instance); "" if unknown. */
-export const sessionStart = () => epoch.bornAt;
+export const sessionStart = () => currentTenant()?.bornAt ?? epoch.bornAt;
 export function ensureEpoch(resetAt: unknown) {
-  if (typeof resetAt !== "string" || !resetAt || resetAt <= epoch.bornAt) return;
+  const t = currentTenant();
+  const born = t ? t.bornAt : epoch.bornAt;
+  if (typeof resetAt !== "string" || !resetAt || resetAt <= born) return;
   const s = state();
-  const stale = s.chat.some((c) => c.at < resetAt) || s.timeline.some((t) => t.at < resetAt);
+  const stale = s.chat.some((c) => c.at < resetAt) || s.timeline.some((x) => x.at < resetAt);
+  if (t) { if (stale) t.state = fresh(); t.bornAt = resetAt; return; }
   if (stale) g.__sniper = fresh();
   epoch.bornAt = resetAt;
 }

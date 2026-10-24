@@ -3,6 +3,7 @@ import { z } from "zod";
 import { handleInbound } from "@/lib/tools";
 import { ensureEpoch, state } from "@/lib/store";
 import { syncThreads } from "@/lib/mailsync";
+import { withUser } from "@/lib/session";
 export const dynamic = "force-dynamic";
 
 /** DEMO ONLY: simulates the accomplice landlord replying (mock mail mode, or for rehearsal). */
@@ -14,7 +15,7 @@ const PRESETS: Record<string, string> = {
 };
 const Body = z.object({ preset: z.string().optional(), text: z.string().optional(), threadId: z.string().optional(), resetAt: z.string().optional() });
 
-export async function POST(req: Request) {
+export const POST = withUser(async (req: Request) => {
   const p = Body.safeParse(await req.json().catch(() => ({})));
   if (!p.success) return NextResponse.json({ error: "bad body" }, { status: 400 });
   ensureEpoch(p.data.resetAt);
@@ -28,4 +29,4 @@ export async function POST(req: Request) {
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message.slice(0, 300) }, { status: 500 });
   }
-}
+});

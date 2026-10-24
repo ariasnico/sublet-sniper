@@ -7,6 +7,7 @@ import { sendMail } from "./mail";
 import { syncThreads } from "./mailsync";
 import { fmtLA, TZ } from "./time";
 import { findListing, log, now, state, uid, type CallRecord, type State, type Thread, type ThreadMsg } from "./store";
+import { currentTenant, inBackground, indexCall } from "./tenant-ctx";
 
 /**
  * VOICE: the agent phones the DEMO landlord through an ElevenLabs Agent (outbound call over a Twilio/SIP number
@@ -78,6 +79,8 @@ export async function callVars(t: Thread, call: CallRecord): Promise<Vars> {
     renter_profile: `- ${s.profile.occupation}. ${s.profile.about} ${s.profile.smoker ? "Smoker" : "Non-smoker"}, ${s.profile.pets}. ${s.profile.references}.`,
     callback_number: process.env.VOICE_CALLBACK_NUMBER || "+1 415 582 1858", renter_email: s.profile.email,
     call_id: call.id, thread_id: t.id, am_thread_id: t.agentmailThreadId ?? "", listing_id: t.listingId,
+    // Multi-tenant: the voice tool/webhook routes back to this user's session (also indexed by call/conversation id).
+    user_id: currentTenant()?.userId ?? "",
   };
 }
 
@@ -99,6 +102,7 @@ export async function startCall(t: Thread, mode: "phone" | "browser" = "phone"):
     mode: mode === "browser" ? "browser" : sim ? "mock" : "elevenlabs", status: "calling", startedAt: now(), transcript: [] };
   s.calls.push(call);
   s.calls = s.calls.slice(-10);
+  indexCall(call.id);
   const vars = await callVars(t, call);
   log("call", `📞 Calling the landlord about "${clean(t.listingTitle)}"${call.mode === "mock" ? " (simulated)" : call.mode === "browser" ? " (browser)" : ""}`);
   say(s, `call:start:${call.id}`, "📞 Calling the landlord…");
@@ -110,13 +114,16 @@ export async function startCall(t: Thread, mode: "phone" | "browser" = "phone"):
         conversation_initiation_client_data: { dynamic_variables: vars }, telephony_call_config: { ringing_timeout_secs: 30 } }) });
       if (r.success === false) throw new Error(String(r.message ?? "call not started"));
       call.conversationId = typeof r.conversation_id === "string" ? r.conversation_id : undefined;
+      indexCall(call.conversationId);
     } catch (e) {
       failCall(call, e instanceof Error ? e.message : "call failed");
       return { error: call.error ?? "call failed" };
     }
   } else if (call.mode === "mock") {
     call.conversationId = `mock-conv-${call.id}`;
-    void runMock(call, vars, Number(process.env.VOICE_MOCK_STEP_MS ?? 1600));
+    const sim = runMock(call, vars, Number(process.env.VOICE_MOCK_STEP_MS ?? 1600));
+    inBackground(sim); // tenant: saved as the simulator advances, and kept alive after the response
+    void sim;
   }
   return { call, vars };
 }
@@ -387,6 +394,7 @@ export async function runMock(call: CallRecord, vars: Vars, stepMs = 1600) {
     const secs = (Date.now() - t0) / 1000;
     turns.push({ role: turn.from === "agent" ? "agent" : "user", message: text, time_in_call_secs: secs });
     call.transcript.push({ id: `${call.id}-${turns.length - 1}`, from: turn.from, text, at: now(), channel: "call" });
+    await currentTenant()?.persist().catch(() => {});
   }
   await sleep(stepMs);
   await finishCall(call, { conversation_id: call.conversationId, transcript: turns, analysis: { transcript_summary: "Landlord confirmed availability, dropped a Zelle deposit request, agreed to $3,600/mo and a live video tour Monday 5:30 PM.", call_successful: "success" } }, { recap: true });

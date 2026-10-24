@@ -6,6 +6,7 @@ import { syncThreads } from "@/lib/mailsync";
 import { findListing, hydrate, publicState, state } from "@/lib/store";
 import { autoEmailable, sendContact } from "@/lib/tools";
 import { signedUrl, startCall } from "@/lib/voice";
+import { withUser } from "@/lib/session";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
@@ -15,7 +16,7 @@ export const maxDuration = 60;
  * mode "browser" returns a signed URL so the presenter can play the landlord from the laptop mic.
  */
 const Body = z.object({ threadId: z.string().optional(), listingId: z.string().optional(), mode: z.enum(["phone", "browser"]).optional(), snapshot: z.unknown().optional() });
-export async function POST(req: Request) {
+export const POST = withUser(async (req: Request) => {
   const p = Body.safeParse(await req.json().catch(() => null));
   if (!p.success || (!p.data.threadId && !p.data.listingId)) return NextResponse.json({ error: "threadId or listingId required" }, { status: 400 });
   const browser = p.data.mode === "browser";
@@ -43,4 +44,4 @@ export async function POST(req: Request) {
     catch { r.call.status = "failed"; r.call.error = "signed url"; return NextResponse.json({ error: "Couldn't start the browser session" }, { status: 502 }); }
   }
   return NextResponse.json({ ok: true, callId: r.call.id, status: r.call.status, ...(browser ? { signedUrl: url, dynamicVariables: r.vars } : {}), state: { ...publicState(), modes: modes() } });
-}
+});

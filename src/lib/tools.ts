@@ -13,6 +13,7 @@ import { emailAllowed, firstContact, parseWindow, planReply, writeReply, detectR
 import { CONSENT_NO, CONSENT_YES, autopilotView, markNarrated, narrate } from "./autopilot";
 import { fmtLA } from "./time";
 import { findListing, log, now, state, uid, type Approval, type Thread } from "./store";
+import { indexThread, tagSubject } from "./tenant-ctx";
 import { PLACES } from "./geo";
 import type { Criteria, ListingType, RankedListing, RawListing } from "./types";
 import type { ToolDef } from "./llm";
@@ -159,7 +160,10 @@ export async function sendContact(listingId: string | undefined, to: string, sub
   if (!emailAllowed(to)) { log("flag", `Blocked email to ${to}: not on the demo allowlist`); return { error: "recipient not allowlisted" as const }; }
   const l = listingId ? findListing(listingId) : undefined;
   if (auto && (!l || !autoEmailable(l))) { log("flag", `Autopilot will not email "${l?.title ?? listingId}": only allowlisted demo landlords`); return { error: "not auto-contactable" as const }; }
+  // Shared AgentMail inbox: the subject carries the tenant tag and the thread is indexed for the mail webhook.
+  subject = tagSubject(subject);
   const sent = await sendMail(to, subject, body);
+  indexThread(sent.threadId);
   const t: Thread = { id: uid("th"), listingId: listingId ?? "", listingTitle: l?.title ?? "listing", landlordEmail: to, subject,
     messages: [{ id: sent.messageId, from: "agent", text: body, at: now() }], status: "awaiting_landlord", agentmailThreadId: sent.threadId, lastMessageId: sent.messageId, askedProof: true, auto };
   s.threads.unshift(t);
