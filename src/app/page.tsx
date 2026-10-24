@@ -4,6 +4,9 @@ import { getImageProps } from "next/image";
 import { preload } from "react-dom";
 import { Bot } from "./Bot";
 import { CopyButton } from "./landing/CopyButton";
+import { HeroCinema } from "./landing/HeroCinema";
+import { NegotiationPlayer } from "./landing/NegotiationPlayer";
+import { AgentTerminal } from "./landing/AgentTerminal";
 import { RedFlagMarquee } from "./landing/borrowed/RedFlagMarquee";
 import { HaloCards } from "./landing/borrowed/HaloCards";
 import { LiveDemos } from "./landing/borrowed/LiveDemos";
@@ -29,11 +32,11 @@ export const metadata: Metadata = {
 };
 
 const TOOLS: Array<[string, string]> = [
-  ["search_sublets", "Live Craigslist search for SF, ranked against the city's medians."],
-  ["check_listing_scam", "Scam X-ray for any listing URL: score out of 100 plus the signals."],
-  ["contact_landlord", "Email the landlord as the user, with their approval, and keep negotiating."],
-  ["get_deals", "Current threads: listed price, asked price, agent offer, viewing status."],
-  ["ask_agent", "Talk to the whole agent in plain language, English or Spanish."],
+  ["search_sublets", "Live SF search, ranked against city medians."],
+  ["check_listing_scam", "Scam score for any listing URL."],
+  ["contact_landlord", "Reach the landlord and negotiate, with your approval."],
+  ["get_deals", "Prices, offers and booked viewings."],
+  ["ask_agent", "Talk to the whole agent in plain language."],
 ];
 
 const SCAMS: Array<{ quote: string; tell: string }> = [
@@ -94,13 +97,26 @@ export default function Landing() {
               Your personal rental agent for San&nbsp;Francisco.
             </h1>
             <p className={s.lede}>
-              It finds the sublet, blocks the scammers, talks to the landlord as you, and books the viewing. You only approve.
+              Tell it what you want to rent. It searches, blocks scams, calls the landlord, negotiates and books the viewing. You just show&nbsp;up.
             </p>
             <div className={s.ctaRow}>
-              <Link href="/app" className={`${s.btn} ${s.btnPrimary}`}>Open the app</Link>
-              <a href="#agents" className={`${s.btn} ${s.btnGhost}`}>Use it from your AI agent</a>
+              <Link href="/app" className={`${s.btn} ${s.btnPrimary} ${s.btnHero}`}>
+                Open the app
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h13m-5-6 6 6-6 6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+              </Link>
+              <a href="#agents" className={`${s.btn} ${s.btnGhost}`}>Connect your agent</a>
             </div>
-            <p className={s.heroNote}>Voice or text. English or Spanish. Live Craigslist data.</p>
+          </div>
+          <div className={s.cinemaBox}>
+            <HeroCinema className={s.cinema} />
+          </div>
+        </section>
+
+        {/* ── Hear it negotiate ───────────────────────────── */}
+        <section className={s.listen} aria-labelledby="listen-title">
+          <div className={s.listenInner}>
+            <h2 id="listen-title" className={s.h3}>Hear it negotiate.</h2>
+            <NegotiationPlayer />
           </div>
         </section>
 
@@ -112,13 +128,7 @@ export default function Landing() {
             <div className={s.problemText}>
               <h2 id="problem-title" className={s.h2}>Finding a short‑term place in SF is a&nbsp;part‑time job.</h2>
               <p>
-                Hours scrolling Craigslist. Landlords who never write back. And a steady stream of fake listings:
-                the owner is conveniently abroad, the photos belong to someone else, and the deposit has to go out
-                by Zelle or wire before anyone shows you the door.
-              </p>
-              <p className={s.stat}>
-                Scams and ghosting were the most common complaints in the SF renter threads we read before building this.
-                Every one of these messages is a pattern the Scam X‑ray catches.
+                Hours on Craigslist. Landlords who never reply. Fake listings that want a Zelle deposit before you see the door.
               </p>
             </div>
             <ul className={s.scamList} aria-label="Examples of listings the Scam X-ray blocks">
@@ -137,12 +147,12 @@ export default function Landing() {
         {/* ── How it works ─────────────────────────────────── */}
         <section id="how" className={`${s.section} ${s.sectionTint}`} aria-labelledby="how-title">
           <h2 id="how-title" className={s.h2}>How it works</h2>
-          <p className={s.sub}>Four steps. The agent does the legwork; you make the decisions.</p>
+          <p className={s.sub}>It does the legwork. You decide.</p>
           <ol className={s.steps}>
             <li className={s.step}>
               <div className={s.stepText}>
                 <h3>Tell it what you need</h3>
-                <p>Talk or type, in English or Spanish. Neighborhood, dates, budget, furnished or not.</p>
+                <p>Voice or text, English or Spanish.</p>
               </div>
               <div className={s.artifact}>
                 <div className={s.bubble}>Busco 1BR amoblado en SF, menos de $4,000, del 1/11 al 15/12.</div>
@@ -150,8 +160,8 @@ export default function Landing() {
             </li>
             <li className={s.step}>
               <div className={s.stepText}>
-                <h3>It searches Craigslist live and X-rays every listing</h3>
-                <p>Each result gets a scam score: price against SF medians, wire or Zelle requests, out-of-country owners, upfront amounts over the legal cap, reused photos.</p>
+                <h3>It searches live and scores every listing</h3>
+                <p>Price vs. SF medians, Zelle or wire requests, absent owners, reused photos.</p>
               </div>
               <div className={s.artifact}>
                 <div className={s.card}>
@@ -166,8 +176,8 @@ export default function Landing() {
             </li>
             <li className={s.step}>
               <div className={s.stepText}>
-                <h3>It emails the landlord as you</h3>
-                <p>Asks the questions you would, negotiates the price, asks for a live video walkthrough, and refuses any money before a viewing.</p>
+                <h3>It calls and emails the landlord</h3>
+                <p>Negotiates the price and refuses any money before a viewing.</p>
               </div>
               <div className={s.artifact}>
                 <div className={s.mail}>
@@ -178,8 +188,8 @@ export default function Landing() {
             </li>
             <li className={s.step}>
               <div className={s.stepText}>
-                <h3>It books the viewing on your calendar</h3>
-                <p>When the landlord gives a window, the agent picks a free slot, confirms once by email, and puts it on your calendar.</p>
+                <h3>It books the viewing</h3>
+                <p>A free slot in the landlord&rsquo;s window, on your calendar.</p>
               </div>
               <div className={s.artifact}>
                 <div className={s.cal}>
@@ -197,9 +207,9 @@ export default function Landing() {
         <section id="agents" className={`${s.section} ${s.sectionDark}`} aria-labelledby="agents-title">
           <div className={s.agentsGrid}>
             <div>
-              <h2 id="agents-title" className={s.h2}>Use it as a human, or from your agents.</h2>
+              <h2 id="agents-title" className={s.h2}>Works from your AI agent too.</h2>
               <p className={s.subDark}>
-                Sublet Sniper is also a remote MCP server. Any MCP client, from Claude Code to a custom connector in Claude or ChatGPT, can search, X-ray, negotiate and read deals with the same guardrails.
+                A remote MCP server for Claude, ChatGPT or any MCP client. Same guardrails.
               </p>
               <dl className={s.tools}>
                 {TOOLS.map(([name, desc]) => (
@@ -211,14 +221,11 @@ export default function Landing() {
               </dl>
             </div>
             <div className={s.snippets}>
+              <AgentTerminal command={CLAUDE_CODE_CMD} />
               <div className={s.snippet}>
-                <div className={s.snippetHead}><span>Claude Code</span><CopyButton text={CLAUDE_CODE_CMD} className={s.copy} /></div>
-                <pre><code>{CLAUDE_CODE_CMD}</code></pre>
-              </div>
-              <div className={s.snippet}>
-                <div className={s.snippetHead}><span>Claude or ChatGPT custom connector</span><CopyButton text={MCP_URL} className={s.copy} /></div>
+                <div className={s.snippetHead}><span>Claude or ChatGPT connector</span><CopyButton text={MCP_URL} className={s.copy} /></div>
                 <pre><code>{MCP_URL}</code></pre>
-                <p className={s.snippetNote}>Settings, Connectors, Add custom connector. Paste the URL. No auth needed for the demo.</p>
+                <p className={s.snippetNote}>Settings → Connectors → Add custom connector.</p>
               </div>
             </div>
           </div>
@@ -230,15 +237,15 @@ export default function Landing() {
           <ul className={s.promises}>
             <li>
               <h3>Pay before a viewing</h3>
-              <p>No deposits, no Zelle, no wire, no gift cards, no &ldquo;holding fee&rdquo;. If a landlord insists, the agent says no and tells you why.</p>
+              <p>No deposits, Zelle, wire or gift cards.</p>
             </li>
             <li>
               <h3>Message real Craigslist landlords on its own</h3>
-              <p>Search results link back to Craigslist and you click Reply. No automated contact, no captcha solving.</p>
+              <p>You click Reply on Craigslist. No bots, no captchas.</p>
             </li>
             <li>
               <h3>Speak for you without your approval</h3>
-              <p>Every outreach starts with your tap. The agent writes as you, in your name, only to landlords you approved.</p>
+              <p>Every outreach starts with your tap.</p>
             </li>
           </ul>
         </section>

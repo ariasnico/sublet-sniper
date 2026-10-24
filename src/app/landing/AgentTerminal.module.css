@@ -1,0 +1,43 @@
+.term {
+  --ease: cubic-bezier(0.23, 1, 0.32, 1);
+  border-radius: 16px; overflow: hidden; background: #171412;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.09), 0 30px 80px -30px rgba(249, 115, 22, 0.35);
+}
+.head { display: flex; align-items: center; gap: 12px; padding: 10px 10px 10px 16px; font-size: 0.8125rem; font-weight: 600; color: rgba(245, 243, 239, 0.6);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08); background: #211D1A; }
+.head > span:nth-child(2) { margin-right: auto; }
+.lights { display: inline-flex; gap: 6px; }
+.lights i { width: 10px; height: 10px; border-radius: 50%; background: #3A3430; }
+.lights i:first-child { background: #F97316; }
+.copy { font: inherit; font-weight: 600; font-size: 0.8125rem; color: #fff; background: rgba(255, 255, 255, 0.1); border: 0; border-radius: 9px; padding: 7px 12px;
+  min-width: 72px; min-height: 40px; cursor: pointer; transition: background-color 160ms var(--ease), transform 160ms var(--ease); }
+.copy:hover { background: rgba(255, 255, 255, 0.18); }
+.copy:active { transform: scale(0.96); }
+.copy[data-done] { background: #F97316; }
+
+.body { padding: 18px 18px 20px; display: grid; gap: 8px; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 0.8125rem; line-height: 1.6; color: #F5F3EF; }
+.body p { margin: 0; overflow-wrap: anywhere; }
+.body > [data-on], .body > :not(:first-child) { transition: opacity 220ms var(--ease), transform 220ms var(--ease); }
+.body > :not(:first-child):not([data-on]) { opacity: 0; transform: translateY(4px); }
+
+.cmd { display: flex; gap: 10px; }
+.cmd + .out { margin-top: -4px; }
+.ps { color: #FB923C; font-weight: 700; flex: none; }
+.out { color: #86EFAC; padding-left: 20px; }
+.out b { font-weight: 600; color: #fff; }
+.tool { color: rgba(245, 243, 239, 0.65); margin-top: 6px; }
+.tool b { margin-right: 6px; }
+.tool b { color: #FDBA74; font-weight: 600; }
+.tool b + * { color: inherit; }
+.dot { display: inline-block; vertical-align: 1px; margin-right: 8px; width: 8px; height: 8px; border-radius: 50%; background: #FB923C; animation: blink 700ms ease-in-out infinite; }
+.dot[data-done] { background: #22C55E; animation: none; }
+@keyframes blink { 50% { opacity: 0.25; } }
+.res { padding-left: 16px; color: rgba(245, 243, 239, 0.85); }
+.res em { font-style: normal; color: #FCA5A5; }
+.answer { margin-top: 10px; padding-top: 12px; border-top: 1px dashed rgba(255, 255, 255, 0.14); display: grid; gap: 2px;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 0.9375rem; line-height: 1.5; color: #fff; }
+
+@media (prefers-reduced-motion: reduce) {
+  .body > * { transition: none !important; }
+  .dot { animation: none; }
+}
