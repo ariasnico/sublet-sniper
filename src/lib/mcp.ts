@@ -63,7 +63,7 @@ export async function mcpCheckScam(i: { url: string }, fetcher: (url: string) =>
 }
 
 /** Contacts a landlord. Email only to allowlisted demo addresses; Craigslist listings get a draft the human sends. */
-export async function mcpContact(i: { listingId: string }) {
+export async function mcpContact(i: { listingId: string; url?: string }) {
   if (!findListing(i.listingId)) await toolSearch({ query: "" }); // fresh serverless instance: rebuild results
   if (!findListing(i.listingId) && i.listingId.startsWith("demo-")) {
     // Demo listings are fixtures: score them directly instead of hoping they rank in the default top results.
@@ -71,7 +71,9 @@ export async function mcpContact(i: { listingId: string }) {
     const hit = ranked.find((x) => x.id === i.listingId);
     if (hit) (hit.scam.light === "red" ? state().flagged : state().results).push(hit);
   }
-  const l = findListing(i.listingId);
+  // Results live per serverless instance: with the listing URL we can rebuild it anywhere.
+  if (!findListing(i.listingId) && i.url && CL_URL.test(i.url)) await toolAnalyzeUrl({ url: i.url });
+  const l = findListing(i.listingId) ?? (i.url ? [...state().results, ...state().flagged].find((x) => x.url === i.url) : undefined);
   if (!l) return { error: `Unknown listingId "${i.listingId}". Call search_sublets first and use an id from its matches.` };
   const email = l.demo?.landlordEmail;
   if (email && !emailAllowed(email)) return { sent: false, blocked: true, reason: "Recipient is not on the demo allowlist. Sublet Sniper only emails the demo landlord." };
@@ -152,7 +154,7 @@ export function registerSubletTools(server: McpServer) {
   server.registerTool("contact_landlord", {
     title: "Contact a landlord",
     description: "Send the renter's first message for a listing id from search_sublets. Only the labeled demo listing is emailed automatically (demo allowlist). For real Craigslist listings nothing is sent: you get the drafted message and the listing URL, and a human must click Reply on Craigslist. Red-flagged listings are refused.",
-    inputSchema: z.object({ listingId: z.string().describe("Listing id from search_sublets matches") }),
+    inputSchema: z.object({ listingId: z.string().describe("Listing id from search_sublets matches"), url: z.string().optional().describe("The match url from search_sublets; pass it so this works on any server instance") }),
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   }, async (args) => result(await mcpContact(args)));
 

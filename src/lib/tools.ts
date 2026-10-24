@@ -76,7 +76,8 @@ export async function toolSearch(input: Record<string, unknown>) {
     replyGuide: "The cards already show the listings: do NOT list them. Reply in at most 2 short lines: how many safe places, how many scams blocked, and one next step." };
 }
 
-export const CL_URL = /https?:\/\/[a-z.]*craigslist\.org\/[^\s)>"']+/i;
+// Host must be craigslist.org or a subdomain of it (no look-alikes such as evilcraigslist.org).
+export const CL_URL = /https?:\/\/(?:[a-z0-9-]+\.)*craigslist\.org\/[^\s)>"']+/i;
 
 /** Fetches and scam-scores one pasted Craigslist listing; pins it on top of the board with its score. */
 export async function toolAnalyzeUrl(input: Record<string, unknown>, fetcher: (url: string) => Promise<RawListing> = fetchListingPage) {
