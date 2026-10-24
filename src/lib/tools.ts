@@ -4,7 +4,8 @@ import { fetchListingPage, snapshotListings } from "./sources/craigslist";
 import { normalizeHeuristic } from "./normalize";
 import { rankListings } from "./rank";
 import { llmNormalize } from "./llm-normalize";
-import { llmProvider } from "./config";
+import { autopilotChannel, llmProvider } from "./config";
+import { callTarget, startCall } from "./voice";
 import { proposeSlots, bookViewing, slotInWindow, type Slot } from "./calendar";
 import { sendMail } from "./mail";
 import { syncThreads } from "./mailsync";
@@ -163,7 +164,10 @@ export async function sendContact(listingId: string | undefined, to: string, sub
     messages: [{ id: sent.messageId, from: "agent", text: body, at: now() }], status: "awaiting_landlord", agentmailThreadId: sent.threadId, lastMessageId: sent.messageId, askedProof: true, auto };
   s.threads.unshift(t);
   log("email_out", `${auto ? "Autopilot emailed" : "Emailed"} ${to} (${sent.mode}) about "${t.listingTitle}"`);
-  return { ok: true as const, threadId: t.id };
+  // AUTOPILOT_CHANNEL=call: right after the first email (which anchors the AgentMail thread), phone the demo landlord.
+  let called = false;
+  if (auto && autopilotChannel() === "call" && !("error" in callTarget(t))) called = !("error" in (await startCall(t).catch(() => ({ error: "call failed" }))));
+  return { ok: true as const, threadId: t.id, called };
 }
 
 /** draft_contact tool: with autopilot on, an allowlisted demo landlord is emailed right away; anything else is a draft. */

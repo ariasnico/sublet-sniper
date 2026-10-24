@@ -98,12 +98,19 @@ async function doSync(): Promise<PendingInbound[]> {
       return { id: m.message_id, from: mine ? "agent" : "landlord", text, at: String(m.timestamp ?? ""), flagged: flags.length ? flags : undefined };
     });
     const d = derivedStatus(tmsgs);
+    const existing = s.threads.find((t) => t.agentmailThreadId === tid);
+    // Phone-call turns are not in AgentMail: keep the ones this instance has (thread or carried call records).
+    const known = new Set(tmsgs.map((m) => m.id));
+    for (const m of [...(existing?.messages ?? []).filter((x) => x.channel === "call"), ...s.calls.filter((c) => c.amThreadId === tid && c.status !== "calling").flatMap((c) => c.transcript)]) {
+      if (m.id && known.has(m.id)) continue;
+      known.add(m.id); tmsgs.push(m);
+    }
+    tmsgs.sort((a, b) => a.at.localeCompare(b.at));
     for (const m of msgs) {
       const from = fromAddress(String(m.from ?? ""));
       if (from !== own && !(m.labels ?? []).includes(HANDLED) && m.message_id)
         next.push({ messageId: m.message_id, threadId: tid, from, text: String(m.extracted_text ?? m.text ?? "") });
     }
-    const existing = s.threads.find((t) => t.agentmailThreadId === tid);
     const last = msgs[msgs.length - 1];
     const derived: Thread = {
       id: existing?.id ?? `th-${tid}`, /* stable across instances and calls */ listingId: existing?.listingId ?? listing?.id ?? "demo-mission-bay",

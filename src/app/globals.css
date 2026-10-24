@@ -982,3 +982,21 @@ input[type="checkbox"] { width: auto; accent-color: var(--accent); box-shadow: n
   .chat [data-tip]::after, .c-swap > svg, .c-fu-ico { transition: opacity 150ms ease; }
   .chat .c-act:active, .chat .c-fu:active, .chat .c-btn:active, .chat .c-tools button:active { transform: none !important; }
 }
+
+/* ---- Phone call on a deal ---- */
+.call-live { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 8px 0 2px; padding: 8px 10px; border-radius: 10px; background: var(--accent-soft); box-shadow: 0 0 0 1px var(--accent-soft-edge); font-size: 13px; }
+.call-live i { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); animation: pulse-o 1.4s var(--ease-out) infinite; }
+.call-live b { color: var(--accent-strong); font-weight: 650; }
+.call-live span { flex-basis: 100%; color: var(--mute); font-size: 12.5px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; animation: num-in 240ms var(--ease-out) both; }
+.call-end { margin: 6px 0 0; font-size: 12.5px; color: var(--faint); }
+.call-tx { margin: 8px 0 0; font-size: 12.5px; }
+.call-tx summary { cursor: pointer; color: var(--mute); font-weight: 600; list-style: none; }
+.call-tx summary::before { content: "📞 "; }
+.call-tx summary::-webkit-details-marker { display: none; }
+.call-tx ol { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 5px; max-height: 260px; overflow: auto; }
+.call-tx li { display: grid; grid-template-columns: 66px 1fr; line-height: 1.4; color: var(--text); }
+.call-tx li b { font-weight: 650; color: var(--faint); }
+.call-tx li.ag b { color: var(--accent-strong); }
+.call-tx li em { font-style: normal; color: var(--red); font-weight: 600; }
+.th-call { margin-left: auto; box-shadow: none; background: transparent; padding: 2px 0; font-size: 12px; font-weight: 600; color: var(--accent-strong); }
+@media (prefers-reduced-motion: reduce) { .call-live i, .call-live span { animation: none; } }

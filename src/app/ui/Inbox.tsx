@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import type { Thread } from "@/lib/store";
+import type { CallRecord, Thread } from "@/lib/store";
 import type { RankedListing } from "@/lib/types";
 
 const STATUS: Record<Thread["status"], string> = { awaiting_landlord: "Emailed, waiting", active: "Talking", viewing_proposed: "Slots offered", booked: "Viewing booked", flagged: "Scam refused" };
@@ -28,6 +28,8 @@ function protocol(t: Thread, l?: RankedListing): Check[] {
 const money = (t: string) => [...t.replace(/,/g, "").matchAll(/\$\s?(\d{3,5})(?!\d)/g)].map((m) => Number(m[1]));
 /** Price negotiation read from the thread itself: what was listed, what the landlord asked, what the agent offered. */
 export function deal(t: Thread, l?: RankedListing) {
+  // After a phone negotiation the stored deal is the record (spoken prices don't follow the email patterns).
+  if (t.deal && t.messages.some((m) => m.channel === "call")) return { listed: l?.priceMonthly ?? null, asked: t.deal.asked, offered: t.deal.agreed ?? t.deal.offered };
   let asked: number | null = null, offered: number | null = null;
   for (const m of t.messages) {
     if (m.from === "landlord") {
@@ -104,13 +106,31 @@ function headline(t: Thread, d: ReturnType<typeof deal>, replying: boolean, ev?:
   return { tone: "wait", text: "Emailed the landlord as you. Waiting for a reply." };
 }
 
-function ThreadCard({ t, listing, ev }: { t: Thread; listing?: RankedListing; ev?: Ev }) {
+/** Phone call state on a deal: a live pulsing line while calling, then the transcript behind one toggle. */
+function CallBox({ c }: { c: CallRecord }) {
+  if (c.status === "calling") {
+    const line = c.transcript[c.transcript.length - 1];
+    return <div className="call-live" aria-live="polite"><i aria-hidden="true" /><b>📞 Calling…</b>{line && <span key={line.id}>{line.from === "agent" ? "Agent" : "Landlord"}: {line.text}</span>}</div>;
+  }
+  if (c.status !== "done") return <div className="call-end">📞 {c.status === "no_answer" ? "No answer" : "Call failed"}</div>;
+  return (
+    <details className="call-tx">
+      <summary>Call transcript</summary>
+      <ol>{c.transcript.map((m, i) => <li key={m.id ?? i} className={m.from === "agent" ? "ag" : "ll"}><b>{m.from === "agent" ? "Agent" : "Landlord"}</b><span>{m.text}{m.flagged && <em> Refused</em>}</span></li>)}</ol>
+    </details>
+  );
+}
+
+interface CallProps { call?: CallRecord; canCall?: boolean; onCall?: (threadId: string) => void; onBrowser?: (threadId: string) => void; onEnd?: () => void; browserLive?: boolean }
+
+function ThreadCard({ t, listing, ev, call, canCall, onCall, onBrowser, onEnd, browserLive }: { t: Thread; listing?: RankedListing; ev?: Ev } & CallProps) {
   // The emails are the receipts, not the job: collapsed by default. Anything that arrives while you watch peeks in.
   const [open, setOpen] = useState(false);
   const [all, setAll] = useState(false);
-  const last = t.messages[t.messages.length - 1];
-  const peek = t.messages.slice(-2).filter((m) => !!PAGE_LOAD && m.at > PAGE_LOAD);
-  const msgs = open ? (all ? t.messages : t.messages.slice(-3)) : peek;
+  const mail = t.messages.filter((m) => m.channel !== "call");
+  const last = mail[mail.length - 1];
+  const peek = mail.slice(-2).filter((m) => !!PAGE_LOAD && m.at > PAGE_LOAD);
+  const msgs = open ? (all ? mail : mail.slice(-3)) : peek;
   // The landlord just wrote and the agent hasn't answered yet: show it working.
   const replying = last?.from === "landlord" && !last.flagged && t.status !== "booked" && Date.now() - new Date(last.at).getTime() < 3 * 60e3;
   const card = useRef<HTMLDivElement>(null);
@@ -140,6 +160,7 @@ function ThreadCard({ t, listing, ev }: { t: Thread; listing?: RankedListing; ev
         <span key={t.status} className={`st st-${t.status}`}>{STATUS[t.status] ?? t.status}</span>
       </div>
       <p key={now.text} className={`th-now ${now.tone}`} aria-live="polite"><i aria-hidden="true" />{now.text}</p>
+      {call && <CallBox c={call} />}
       <div className="th-k">Safety checks</div>
       <ul className="proto" aria-label="Safety checks">
         {/* Keyed by position so a chip keeps its node and cross-fades when its state flips; the dot remounts to replay its tick. */}
@@ -158,16 +179,20 @@ function ThreadCard({ t, listing, ev }: { t: Thread; listing?: RankedListing; ev
         {replying && <div className="bub ag replying"><div className="bub-who">Your agent, as you</div><div className="typing"><i /><i /><i /></div><span className="replying-t">Reading the reply and checking your calendar</span></div>}
       </div>}
       <div className="th-foot">
-        <button className="th-more" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? "Hide the emails" : `See the emails (${t.messages.length})`}</button>
-        {open && t.messages.length > 3 && <button className="th-more" onClick={() => setAll(!all)}>{all ? "Latest only" : `${t.messages.length - 3} earlier`}</button>}
+        <button className="th-more" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? "Hide the emails" : `See the emails (${mail.length})`}</button>
+        {open && mail.length > 3 && <button className="th-more" onClick={() => setAll(!all)}>{all ? "Latest only" : `${mail.length - 3} earlier`}</button>}
+        {canCall && t.listingId.startsWith("demo-") && call?.status !== "calling" && onCall && <button className="th-call" onClick={() => onCall(t.id)}>📞 Call landlord</button>}
+        {onBrowser && t.listingId.startsWith("demo-") && call?.status !== "calling" && <button className="th-more" onClick={() => onBrowser(t.id)}>Talk as landlord (browser)</button>}
+        {browserLive && call?.status === "calling" && call.mode === "browser" && onEnd && <button className="th-more" onClick={onEnd}>End call</button>}
       </div>
     </div>
   );
 }
 
-export function Inbox({ threads, listings = [], events = [] }: { threads: Thread[]; listings?: RankedListing[]; events?: Ev[] }) {
+export function Inbox({ threads, listings = [], events = [], calls = [], ...cp }: { threads: Thread[]; listings?: RankedListing[]; events?: Ev[]; calls?: CallRecord[] } & Omit<CallProps, "call">) {
   return <>{threads.map((t) => {
     const title = cleanTitle(t.listingTitle);
-    return <ThreadCard key={t.id} t={t} listing={listings.find((l) => l.id === t.listingId)} ev={events.find((e) => cleanTitle(e.title) === title)} />;
+    const call = [...calls].reverse().find((c) => c.threadId === t.id || (!!c.amThreadId && c.amThreadId === t.agentmailThreadId));
+    return <ThreadCard key={t.id} t={t} listing={listings.find((l) => l.id === t.listingId)} ev={events.find((e) => cleanTitle(e.title) === title)} call={call} {...cp} />;
   })}</>;
 }

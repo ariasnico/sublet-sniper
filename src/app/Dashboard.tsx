@@ -14,13 +14,13 @@ import { XRay } from "./ui/XRay";
 import { ChatThread } from "./ui/chat/ChatThread";
 import { followUpsFor, type FollowUp } from "./ui/chat/followups";
 import type { Criteria, RankedListing } from "@/lib/types";
-import type { Approval, ChatMsg, Thread, TimelineItem } from "@/lib/store";
+import type { Approval, CallRecord, ChatMsg, Thread, TimelineItem } from "@/lib/store";
 
 const MapView = dynamic(() => import("./ui/MapView"), { ssr: false, loading: () => <div className="map map-loading" /> });
 
-interface Modes { llm: string; mail: string; calendar: string; craigslist: string; voice: string; agentInbox: string }
+interface Modes { llm: string; mail: string; calendar: string; craigslist: string; voice: string; calls?: boolean; browserVoice?: boolean; agentInbox: string }
 interface S { version?: string; analyzedId?: string | null; criteria?: Criteria | null; results: RankedListing[]; flagged: RankedListing[]; timeline: TimelineItem[]; approvals: Approval[]; threads: Thread[]; chat: ChatMsg[];
-  events: { id: string; title: string; start: string; end?: string; link?: string }[]; modes: Modes; searchReport: { mode: string; total: number } | null; autopilot?: Partial<AutopilotView> }
+  events: { id: string; title: string; start: string; end?: string; link?: string }[]; modes: Modes; searchReport: { mode: string; total: number } | null; autopilot?: Partial<AutopilotView>; calls?: CallRecord[] }
 
 /** One "needs you" card: from s.autopilot.needsYou when the backend reports it, else built from pending approvals. */
 type Need = { key: string; kind: NeedsYouItem["kind"]; approvalId?: string; title: string; body?: string; options?: string[]; items?: CraigslistDraft[] };
@@ -55,6 +55,10 @@ const SCAN_STEPS = ["Scanning Craigslist sublets, rooms and apartments", "Normal
 const CONSENT = ["Yes, go", "I'll approve each step"];
 const AP_TIP = "On: your agent emails safe landlords, negotiates and books. You only click Reply on real Craigslist listings.";
 const kindOf = (a: Approval) => a.kind as string;
+/** In-browser ElevenLabs session (fallback when telephony isn't ready): loaded from the CDN only when used. */
+const EL_CLIENT = "https://cdn.jsdelivr.net/npm/@elevenlabs/client@1.27.0/+esm";
+interface ElSession { endSession(): Promise<void> }
+interface ElClient { Conversation: { startSession(o: { signedUrl: string; dynamicVariables?: Record<string, string | number>; onConnect?: (p: { conversationId: string }) => void; onDisconnect?: () => void; onError?: (m: string) => void }): Promise<ElSession> } }
 
 /** Time of the last Reset in this browser; servers drop sessions older than it (see ensureEpoch). */
 const resetMark = () => { try { return localStorage.getItem("sniper-reset-at") ?? ""; } catch { return ""; } };
@@ -265,6 +269,7 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
       if (seenTl.current.has(t.id)) continue;
       seenTl.current.add(t.id);
       if (t.kind === "email_out") toast.success("Email sent", { description: t.text });
+      else if (t.kind === "call") toast(t.text);
       else if (t.kind === "email_in") toast("Landlord replied", { description: t.text });
       else if (t.kind === "search") toast.success("Search done", { description: t.text });
     }
@@ -330,6 +335,32 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
     toast.success("Message copied", { description: "Click Reply on Craigslist and paste it." });
     void approve(d.approvalId, true, undefined, !!d.url);
   };
+  // Phone the demo landlord (ElevenLabs outbound call, or the simulator in VOICE_MODE=mock).
+  const callLandlord = async (threadId: string) => {
+    const r = await call<{ error?: string }>("/api/voice/call", { threadId });
+    if (r.error) toast.error("Couldn't call", { description: r.error });
+  };
+  const elSession = useRef<ElSession | null>(null);
+  const [browserLive, setBrowserLive] = useState(false);
+  const talkAsLandlord = async (threadId: string) => {
+    try {
+      await navigator.mediaDevices.getUserMedia({ audio: true });
+      const r = await call<{ error?: string; signedUrl?: string; callId?: string; dynamicVariables?: Record<string, string | number> }>("/api/voice/call", { threadId, mode: "browser" });
+      if (!r.signedUrl) { toast.error("Couldn't start", { description: r.error ?? "No session" }); return; }
+      const el = (await import(/* webpackIgnore: true */ EL_CLIENT)) as ElClient;
+      elSession.current = await el.Conversation.startSession({ signedUrl: r.signedUrl, dynamicVariables: r.dynamicVariables,
+        onConnect: ({ conversationId }) => { setBrowserLive(true); void call("/api/voice/status", { callId: r.callId, conversationId }); },
+        onDisconnect: () => { setBrowserLive(false); elSession.current = null; void call("/api/voice/status", { callId: r.callId }); },
+        onError: (msg) => toast.error("Voice error", { description: msg }) });
+    } catch { toast.error("Couldn't start the browser call", { description: "Check mic permission." }); }
+  };
+  const endBrowserCall = () => { void elSession.current?.endSession(); };
+  const calling = (s?.calls ?? []).some((c) => c.status === "calling");
+  useEffect(() => {
+    if (!calling) return;
+    const id = setInterval(() => { void call("/api/voice/status"); }, 3000);
+    return () => clearInterval(id);
+  }, [calling, call]);
   const contact = async (id: string) => { setMobile("chat"); await send(`Contactá el listing ${id}`).catch(() => undefined); };
   const landlord = async (preset: string) => { const r = await post<{ error?: string }>("/api/demo/landlord", { preset }); if (r.error) toast.error(r.error); void refresh(); };
   const reset = async () => { const at = new Date().toISOString(); localStorage.setItem("sniper-reset-at", at); setResetAt(at); await post("/api/reset"); best.current = null; seen.current = null; seenNeeds.current = null; setView("list"); void refresh(); toast("Fresh start", { description: "Session cleared." }); };
@@ -517,7 +548,8 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
                 </div>;
               })}
               {events.length > 0 && needCards.filter((_, i) => needs[i].kind !== "craigslist_replies")}
-              <Inbox threads={threads} listings={mapListings} events={events} />
+              <Inbox threads={threads} listings={mapListings} events={events} calls={s?.calls ?? []} canCall={!!m?.calls} onCall={(id) => void callLandlord(id)}
+                onBrowser={demo && m?.browserVoice ? (id) => void talkAsLandlord(id) : undefined} onEnd={endBrowserCall} browserLive={browserLive} />
               {needCards.filter((_, i) => needs[i].kind === "craigslist_replies")}
               {dealsEmpty && <div className="empty deals-empty">
                 <svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true"><path d="M4 6.5h16v11H4z M4 7l8 6 8-6" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" /></svg>
