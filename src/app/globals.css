@@ -856,3 +856,129 @@ input[type="checkbox"] { width: auto; accent-color: var(--accent); box-shadow: n
   .mstats { gap: 18px; color: var(--faint); }
   .mstats span, .mstats .acc { padding: 0; background: none; box-shadow: none; border-radius: 0; }
 }
+
+/* ── chat (claude-style) ── */
+/* User turns are a soft neutral pill on the right; agent turns are plain text on the panel; autopilot narration is a quiet status list.
+   One motion language: 150-250ms strong ease-out, transform/opacity only, hover only on real pointers, :active scale(.97). */
+.chat { --c-pill: #F1EFEA; --c-hover: rgba(28,25,23,.055); --c-gutter: 22px; --c-gap: 10px; }
+.chat .chat-scroll { padding: 8px 6px 18px; }
+.c-thread { display: flex; flex-direction: column; }
+.c-row { margin-top: 18px; }
+.c-row:first-child { margin-top: 4px; }
+.c-agent-row + .c-agent-row:not(.c-head) { margin-top: 12px; }
+/* user */
+.c-user-row { display: flex; justify-content: flex-end; padding-left: 36px; }
+.c-user { background: var(--c-pill); color: var(--text); padding: 9px 15px; border-radius: 20px; font-size: 14px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; max-width: 100%;
+  animation: c-in-r 220ms var(--ease-out) both; }
+/* agent: avatar gutter only on the first message of a run */
+.c-agent-row { display: grid; grid-template-columns: var(--c-gutter) minmax(0, 1fr); column-gap: var(--c-gap); align-items: start; }
+.c-ava { width: var(--c-gutter); height: var(--c-gutter); display: grid; place-items: center; margin-top: 1px; }
+.c-agent-row.c-head .c-ava { border-radius: 50%; background: var(--accent-soft); box-shadow: 0 0 0 1px rgba(249,115,22,.18); animation: c-fade 200ms var(--ease-out) both; }
+.c-body { min-width: 0; }
+.c-agent { font-size: 14px; line-height: 1.62; color: var(--text); overflow-wrap: anywhere; text-wrap: pretty; animation: c-in 240ms var(--ease-out) both; }
+.c-agent .rich > * + * { margin-top: 10px; }
+.c-agent .rich ol, .c-agent .rich ul { gap: 4px; }
+.c-agent .rich li { padding: 2px 0 2px 26px; background: none; box-shadow: none; border-radius: 0; line-height: 1.55; }
+.c-agent .rich ol li::before { left: 0; top: 3px; width: 18px; height: 18px; border-radius: 50%; background: var(--sunk); color: var(--mute); font-size: 11px; font-weight: 650; }
+.c-agent .rich ul li::before { left: 8px; top: 11px; width: 5px; height: 5px; background: var(--faint); }
+.c-agent .rich strong { font-weight: 620; }
+.c-agent .rich .rich-ico { grid-template-columns: 22px minmax(0, 1fr); column-gap: 2px; }
+/* typing */
+.c-typing { display: inline-flex; gap: 4px; height: var(--c-gutter); align-items: center; padding-left: 2px; animation: c-fade 160ms var(--ease-out) both; }
+.c-typing i { width: 6px; height: 6px; border-radius: 50%; background: var(--faint); opacity: .35; animation: typing 1.1s ease-in-out infinite; }
+.c-typing i:nth-child(2) { animation-delay: .14s; } .c-typing i:nth-child(3) { animation-delay: .28s; }
+/* autopilot narration: calm status lines */
+.c-status { animation: c-in 240ms var(--ease-out) both; }
+.c-status-k { display: flex; align-items: center; gap: 6px; height: var(--c-gutter); font-size: 11.5px; font-weight: 600; letter-spacing: .01em; color: var(--faint); }
+.c-status-k i { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
+.c-status ul { list-style: none; margin: 2px 0 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+.c-st { display: grid; grid-template-columns: 16px minmax(0, 1fr); column-gap: 8px; font-size: 13px; line-height: 1.5; color: var(--mute); animation: c-in 220ms var(--ease-out) both; }
+.c-st-ico { height: 19.5px; display: grid; place-items: center; color: var(--faint); }
+.c-st-ico i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.c-st.red .c-st-ico { color: var(--red-dot); } .c-st.green .c-st-ico { color: var(--green-dot); }
+.c-st strong, .c-st .money { color: var(--text); font-weight: 600; }
+/* everything under the latest agent message */
+.c-tail { display: flex; flex-direction: column; padding-left: calc(var(--c-gutter) + var(--c-gap)); margin-top: 8px; }
+.c-cta { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 6px; animation: c-in 220ms var(--ease-out) 40ms both; }
+.chat .c-btn { height: 34px; padding: 0 15px; border-radius: 10px; font-size: 13px; font-weight: 600; color: var(--text); background: var(--panel); box-shadow: 0 0 0 1px var(--line-strong), var(--shadow-sm); }
+.chat .c-btn.primary { color: #fff; background: var(--accent); box-shadow: 0 1px 2px rgba(194,65,12,.35), inset 0 1px 0 rgba(255,255,255,.18); }
+/* action row */
+.c-acts { display: flex; align-items: center; gap: 0; margin: 0 0 0 -7px; animation: c-fade 200ms var(--ease-out) 60ms both; }
+.chat .c-act { position: relative; width: 32px; height: 32px; padding: 0; display: grid; place-items: center; border-radius: 8px; background: transparent; box-shadow: none; color: var(--faint); }
+.chat .c-act.on { color: var(--text); }
+.chat .c-act[aria-pressed="true"] svg path { fill: currentColor; fill-opacity: .14; }
+.chat .c-act:disabled { opacity: .4; cursor: default; }
+.chat .c-act:focus-visible { box-shadow: 0 0 0 2px var(--accent-ring); }
+.c-swap { display: grid; } .c-swap > svg { grid-area: 1 / 1; transition: opacity 150ms var(--ease-out), transform 150ms var(--ease-out); }
+.c-swap > svg:last-child { opacity: 0; transform: scale(.6); }
+.c-swap[data-on] > svg:first-child { opacity: 0; transform: scale(.6); } .c-swap[data-on] > svg:last-child { opacity: 1; transform: none; color: var(--green); }
+/* tooltips (from data-tip), above the button */
+.chat [data-tip]::after { content: attr(data-tip); position: absolute; left: 50%; bottom: calc(100% + 6px); z-index: 5; padding: 4px 8px; border-radius: 7px; background: var(--text); color: #fff;
+  font-size: 11.5px; font-weight: 500; line-height: 1.3; white-space: nowrap; pointer-events: none; opacity: 0; transform: translate(-50%, 3px); transition: opacity 150ms var(--ease-out), transform 150ms var(--ease-out); }
+.chat [data-tip]:focus-visible::after { opacity: 1; transform: translate(-50%, 0); }
+.c-acts .c-act:first-child::after { left: 0; transform: translate(0, 3px); }
+.c-acts .c-act:first-child:focus-visible::after { transform: none; }
+/* "…" menu */
+.c-more { position: relative; display: inline-grid; }
+.c-menu { position: absolute; left: 0; bottom: calc(100% + 4px); z-index: 6; min-width: 160px; padding: 4px; border-radius: 12px; background: var(--panel); box-shadow: 0 0 0 1px var(--line), var(--shadow-lg);
+  transform-origin: bottom left; animation: c-pop 180ms var(--ease-out) both; }
+.chat .c-menu button { width: 100%; display: flex; align-items: center; gap: 8px; padding: 7px 9px; border-radius: 8px; font-size: 13px; font-weight: 500; color: var(--text); background: transparent; box-shadow: none; }
+.chat .c-menu button svg { color: var(--mute); }
+.c-more:has(.c-menu) .c-act::after { display: none; }
+/* suggested follow-ups */
+.c-follow { list-style: none; margin: 10px 0 0 -10px; padding: 0; display: flex; flex-direction: column; gap: 1px; }
+.c-follow li { animation: c-in 220ms var(--ease-out) both; animation-delay: calc(100ms + var(--i, 0) * 40ms); }
+.chat .c-fu { width: 100%; display: flex; align-items: flex-start; gap: 9px; padding: 7px 10px; border-radius: 10px; text-align: left; font-size: 13.5px; font-weight: 450; line-height: 1.45;
+  color: var(--mute); background: transparent; box-shadow: none; }
+.c-fu-ico { flex: none; height: 19.5px; display: grid; place-items: center; color: var(--faint); transition: transform 160ms var(--ease-out), color 160ms var(--ease-out); }
+.chat .c-fu:focus-visible { box-shadow: 0 0 0 2px var(--accent-ring); color: var(--text); }
+/* composer: white field, hairline edge, soft shadow; tools row under the text */
+.chat .c-composer { display: flex; flex-direction: column; align-items: stretch; gap: 2px; padding: 10px 10px 8px; margin-top: 6px; border-radius: 20px; background: var(--panel);
+  box-shadow: 0 0 0 1px var(--line-strong), 0 2px 10px -4px rgba(28,25,23,.08); transition: box-shadow 160ms var(--ease-out); }
+.chat .c-composer:focus-within { box-shadow: 0 0 0 1px rgba(28,25,23,.24), 0 4px 18px -6px rgba(28,25,23,.14); }
+.chat .c-composer textarea { padding: 2px 4px 4px; font-size: 14px; line-height: 1.5; min-height: 42px; }
+.c-tools { display: flex; align-items: center; gap: 2px; }
+.chat .c-tools .mic, .chat .c-tools .c-tool { position: relative; width: 32px; height: 32px; padding: 0; display: grid; place-items: center; border-radius: 50%; color: var(--mute); background: transparent; box-shadow: none; }
+.chat .c-tools .c-tool:not(.on) { color: var(--faint); }
+.chat .c-tools .mic.on { background: var(--red-dot); color: #fff; box-shadow: 0 0 0 3px rgba(239,68,68,.18); }
+.chat .c-tools .mic::after, .chat .c-tools .c-tool::after { left: 0; transform: translate(0, 3px); }
+.chat .c-tools .mic:focus-visible::after, .chat .c-tools .c-tool:focus-visible::after { transform: none; }
+.chat .c-lang { width: auto; height: 28px; padding: 0 26px 0 8px; margin-left: 2px; border-radius: 8px; font-size: 12px; font-weight: 500; color: var(--mute); background-color: transparent; box-shadow: none; cursor: pointer; }
+.chat .c-tools .send { width: 32px; height: 32px; padding: 0; display: grid; place-items: center; border-radius: 50%; color: #fff; background: var(--accent); box-shadow: 0 1px 2px rgba(194,65,12,.35); }
+.chat .c-tools .send:disabled { background: var(--sunk); color: var(--faint); box-shadow: none; opacity: 1; cursor: default; }
+.chat .c-tools .send svg { transition: transform 160ms var(--ease-out); }
+/* presses */
+.chat .c-act:active:not(:disabled), .chat .c-fu:active, .chat .c-btn:active, .chat .c-tools button:active:not(:disabled), .chat .c-menu button:active { transform: scale(.97); }
+/* hover: real pointers only */
+@media (hover: hover) and (pointer: fine) {
+  .chat .c-act:hover:not(:disabled) { background: var(--c-hover); color: var(--text); }
+  .chat [data-tip]:hover::after { opacity: 1; transform: translate(-50%, 0); transition-delay: 350ms; }
+  .chat .c-acts .c-act:first-child:hover::after, .chat .c-tools .mic:hover::after, .chat .c-tools .c-tool:hover::after { transform: none; }
+  .chat .c-menu button:hover { background: var(--c-hover); }
+  .chat .c-fu:hover { background: var(--c-pill); color: var(--text); }
+  .chat .c-fu:hover .c-fu-ico { color: var(--mute); transform: translate(1px, 1px); }
+  .chat .c-btn:hover:not(:disabled) { background: var(--sunk); }
+  .chat .c-btn.primary:hover:not(:disabled) { background: #EA580C; }
+  .chat .c-tools .mic:hover:not(.on), .chat .c-tools .c-tool:hover, .chat .c-lang:hover { background: var(--c-hover); color: var(--text); }
+  .chat .c-tools .send:hover:not(:disabled) { background: #EA580C; }
+  .chat .c-tools .send:hover:not(:disabled) svg { transform: translateY(-1px); }
+}
+@keyframes c-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes c-in-r { from { opacity: 0; transform: translateX(8px); } to { opacity: 1; transform: none; } }
+@keyframes c-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes c-pop { from { opacity: 0; transform: translateY(4px) scale(.96); } to { opacity: 1; transform: none; } }
+@media (max-width: 1000px) {
+  .chat .c-act { width: 40px; height: 40px; }
+  .chat .c-fu { padding: 10px; min-height: 44px; }
+  .chat .c-btn { height: 44px; flex: 1 1 auto; }
+  .chat .c-tools .mic, .chat .c-tools .c-tool, .chat .c-tools .send { width: 40px; height: 40px; }
+  .chat .c-lang { height: 40px; }
+  .chat .c-composer textarea { font-size: 16px; }
+  .chat [data-tip]::after { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .c-user, .c-agent, .c-agent-row.c-head .c-ava, .c-typing, .c-status, .c-st, .c-cta, .c-acts, .c-follow li, .c-menu { animation: none !important; }
+  .c-typing i { animation: none !important; opacity: .6; }
+  .chat [data-tip]::after, .c-swap > svg, .c-fu-ico { transition: opacity 150ms ease; }
+  .chat .c-act:active, .chat .c-fu:active, .chat .c-btn:active, .chat .c-tools button:active { transform: none !important; }
+}

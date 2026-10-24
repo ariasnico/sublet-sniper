@@ -10,6 +10,18 @@ function inline(text: string, key: string): ReactNode[] {
 
 const ICON = new RegExp("^(\\p{Extended_Pictographic}\\uFE0F?)\\s*(.+)$", "u");
 
+/** One line with inline emphasis only (the chat's autopilot status lines). */
+export function RichInline({ text }: { text: string }) { return <>{inline(text, "i")}</>; }
+
+/** Splits a leading emoji icon off a line: ["🚩", "rest"], or [null, line]. */
+export function splitIcon(line: string): [string | null, string] {
+  const m = line.trim().match(ICON);
+  return m ? [m[1], m[2]] : [null, line.trim()];
+}
+
+/** Plain text for "Copy as text": no markdown emphasis markers. */
+export const plainText = (text: string) => text.replace(/\*\*([^*]+)\*\*/g, "$1");
+
 /** Light formatting for agent replies: paragraphs, numbered and bulleted lists. */
 export function Rich({ text }: { text: string }) {
   const out: ReactNode[] = [];
