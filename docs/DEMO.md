@@ -22,7 +22,8 @@ Goal: the judges see an agent rent a place end to end while the human only talks
 | 1:45-2:00 | "I said one sentence and clicked once. It searched, blocked two scams, negotiated and booked the viewing. And it's agent-native: Claude or ChatGPT can use it through MCP." | Point at the mission tracker, all steps done. | Mission: Search ✓ Vet ✓ Contact ✓ Negotiate ✓ Book ✓. |
 
 ## Timing notes
-- Landlord replies arrive by AgentMail webhook; the UI also polls. Expect 3-10 s. Fill the gap with the line in the "You say" column.
+- Measured in production (real Gmail → AgentMail webhook → agent → UI), 2026-10-24: search + consent ~11 s; landlord email → SCAM BLOCKED on screen 14.5 s; landlord email → VIEWING BOOKED 14 s. Fill each ~15 s gap with the line in the "You say" column.
+- Reply from the phone with **Reply** on the agent's email (keeps the thread). A new email with the same subject also works.
 - If mail is slow, press **Check mail**.
 - Send the Zelle message first and the "$3,600 works" message second: ending on the booking keeps the deal status at "Viewing booked".
 
