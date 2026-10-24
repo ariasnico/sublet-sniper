@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type { Thread } from "@/lib/store";
 import type { RankedListing } from "@/lib/types";
 
@@ -10,6 +10,7 @@ const ago = (iso: string) => {
 };
 // Messages newer than page load are "live": they get the typing treatment.
 const PAGE_LOAD = typeof window === "undefined" ? "" : new Date().toISOString();
+const reduced = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 type Check = { k: string; state: "ok" | "wait" | "blocked" };
 function protocol(t: Thread, l?: RankedListing): Check[] {
@@ -42,69 +43,131 @@ export function deal(t: Thread, l?: RankedListing) {
   return { listed: l?.priceMonthly ?? null, asked, offered };
 }
 
-function Typed({ text, live }: { text: string; live: boolean }) {
+function Typed({ text, live, onDone }: { text: string; live: boolean; onDone?: () => void }) {
   const [n, setN] = useState(live ? 0 : text.length);
+  const done = useRef(onDone);
+  useEffect(() => { done.current = onDone; }, [onDone]);
   useEffect(() => {
-    if (!live || window.matchMedia("(prefers-reduced-motion: reduce)").matches) { setN(text.length); return; }
+    if (!live || reduced()) { setN(text.length); if (live) done.current?.(); return; }
     const step = Math.max(2, Math.ceil(text.length / 120)); // ~2s regardless of length
-    const id = setInterval(() => setN((x) => { if (x >= text.length) { clearInterval(id); return x; } return x + step; }), 16);
+    let fired = false;
+    const id = setInterval(() => setN((x) => {
+      // Hold the caret while a full-screen moment (SCAM BLOCKED) covers the page, so the reply types where people can see it.
+      if (document.querySelector(".moment")) return x;
+      if (x >= text.length) { clearInterval(id); if (!fired) { fired = true; setTimeout(() => done.current?.(), 0); } return x; }
+      return Math.min(text.length, x + step);
+    }), 16);
     return () => clearInterval(id);
   }, [text, live]);
-  return <>{text.slice(0, n)}{n < text.length && <span className="caret" />}</>;
+  return <>{text.slice(0, n)}{n < text.length && <span className="caret" aria-hidden="true" />}</>;
 }
 
-function Bubble({ x }: { x: Thread["messages"][number] }) {
+function Bubble({ x, last, onTyped }: { x: Thread["messages"][number]; last: boolean; onTyped?: () => void }) {
   const [open, setOpen] = useState(false);
-  const live = x.from === "agent" && !!PAGE_LOAD && x.at > PAGE_LOAD;
+  // Newer than page load = arrived while you watched: it slides in from its own side and glows once.
+  const fresh = !!PAGE_LOAD && x.at > PAGE_LOAD;
+  const live = x.from === "agent" && fresh;
+  const [typing, setTyping] = useState(live);
   const long = x.text.length > 220;
+  // Only the newest live reply stays open while it types; older long ones collapse so the latest beat stays in view.
+  const clamp = long && !open && !(live && last);
   return (
-    <div className={`bub ${x.from === "landlord" ? "ll" : "ag"}${x.flagged ? " flagged" : ""}${live ? " live" : ""}`}>
+    <div className={`bub ${x.from === "landlord" ? "ll" : "ag"}${x.flagged ? " flagged" : ""}${fresh ? " fresh" : ""}${typing ? " live" : ""}`}>
       <div className="bub-who">{x.from === "landlord" ? "Landlord" : "Your agent, as you"}<span>{ago(x.at)}</span></div>
-      <div className={`bub-text${long && !open && !live ? " clamp" : ""}`} onClick={() => long && setOpen(!open)}><Typed text={x.text} live={live} /></div>
-      {x.flagged && <div className="bub-flag">Blocked: {x.flagged.join(", ")}</div>}
+      <div className={`bub-text${clamp ? " clamp" : ""}`} onClick={() => long && setOpen(!open)}>
+        <Typed text={x.text} live={live} onDone={() => { setTyping(false); onTyped?.(); }} /></div>
+      {x.flagged && <div className="bub-flag"><i aria-hidden="true">!</i>Blocked: {x.flagged.join(", ")}</div>}
     </div>
   );
 }
 
-function ThreadCard({ t, listing }: { t: Thread; listing?: RankedListing }) {
+const usd = (n: number) => `$${n.toLocaleString("en-US")}`;
+
+type Ev = { title: string; start: string };
+const cleanTitle = (s: string) => s.replace(/^Viewing: /, "").replace(/^\[DEMO DATA\]\s*/, "").trim();
+const when = (iso: string) => new Date(iso).toLocaleString("en-US", { timeZone: "America/Los_Angeles", weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+
+/** One plain-English line: what your agent did, and what happens next. You should never need to read the emails. */
+function headline(t: Thread, d: ReturnType<typeof deal>, replying: boolean, ev?: Ev): { tone: "ok" | "busy" | "guard" | "wait"; text: string } {
+  if (t.status === "booked") return { tone: "ok", text: ev ? `Viewing booked ${when(ev.start)}. You just show up.` : "Viewing booked. You just show up." };
+  if (replying) return { tone: "busy", text: "The landlord just replied. Your agent is answering…" };
+  const agreed = t.deal?.agreed;
+  if (agreed) return { tone: "busy", text: `Landlord agreed to ${usd(agreed)}/mo. Booking the viewing…` };
+  if (t.status === "viewing_proposed") return { tone: "wait", text: "Offered viewing times. Waiting for the landlord to pick one." };
+  const flagged = t.messages.filter((m) => m.flagged);
+  if (flagged.length) {
+    const via = flagged.map((m) => m.text).join(" ").match(/zelle|wire|venmo|cash ?app|gift ?card|bitcoin|crypto|western union/i)?.[0];
+    return { tone: "guard", text: `Refused to pay${via ? ` by ${via[0].toUpperCase()}${via.slice(1).toLowerCase()}` : ""} before a viewing${d?.offered ? ` and countered ${usd(d.offered)}` : ""}. Waiting for the landlord.` };
+  }
+  if (d?.offered) return { tone: "wait", text: `Countered ${usd(d.offered)} (they asked ${usd(d.asked)}). Waiting for the landlord.` };
+  if (t.status === "active") return { tone: "wait", text: "Asked for a live video tour and proof of the lease. Waiting for the landlord." };
+  return { tone: "wait", text: "Emailed the landlord as you. Waiting for a reply." };
+}
+
+function ThreadCard({ t, listing, ev }: { t: Thread; listing?: RankedListing; ev?: Ev }) {
+  // The emails are the receipts, not the job: collapsed by default. Anything that arrives while you watch peeks in.
+  const [open, setOpen] = useState(false);
   const [all, setAll] = useState(false);
-  const msgs = all ? t.messages : t.messages.slice(-3);
   const last = t.messages[t.messages.length - 1];
+  const peek = t.messages.slice(-2).filter((m) => !!PAGE_LOAD && m.at > PAGE_LOAD);
+  const msgs = open ? (all ? t.messages : t.messages.slice(-3)) : peek;
   // The landlord just wrote and the agent hasn't answered yet: show it working.
   const replying = last?.from === "landlord" && !last.flagged && t.status !== "booked" && Date.now() - new Date(last.at).getTime() < 3 * 60e3;
+  const card = useRef<HTMLDivElement>(null);
   const fresh = useRef(last?.at);
   const [pulse, setPulse] = useState(false);
+  // Keep the newest beat on screen so the presenter never has to scroll: bring the card's bottom into view,
+  // but never scroll the deal bar (the price story) off the top. Only ever scrolls down, never jumps back.
+  const reveal = useRef(() => requestAnimationFrame(() => {
+    const el = card.current; const box = el?.closest<HTMLElement>(".scroll");
+    if (!el || !box || !el.offsetParent || box.scrollHeight <= box.clientHeight) return;
+    const top = (n: Element) => n.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop;
+    const anchor = top(el.querySelector(".deal") ?? el) - 8;
+    const want = Math.min(top(el) + el.offsetHeight - box.clientHeight + 4, anchor);
+    if (want > box.scrollTop + 2) box.scrollTo({ top: want, behavior: reduced() ? "auto" : "smooth" });
+  })).current;
   useEffect(() => {
-    if (last?.at && fresh.current && last.at !== fresh.current) { setPulse(true); const id = setTimeout(() => setPulse(false), 1600); fresh.current = last.at; return () => clearTimeout(id); }
+    if (last?.at && fresh.current && last.at !== fresh.current) { setPulse(true); reveal(); const id = setTimeout(() => setPulse(false), 1400); fresh.current = last.at; return () => clearTimeout(id); }
     fresh.current = last?.at;
-  }, [last?.at]);
+  }, [last?.at, reveal]);
+  const d = deal(t, listing);
+  const save = d?.offered ? d.asked - d.offered : 0;
+  const now = headline(t, d, replying, ev);
   return (
-    <div className={`th st-${t.status}${pulse ? " pulse" : ""}`}>
+    <div ref={card} className={`th st-${t.status}${pulse ? " pulse" : ""}`}>
       <div className="th-head">
         <div className="th-title">{t.listingTitle.replace(/^\[DEMO DATA\]\s*/, "")}</div>
-        <span className={`st st-${t.status}`}>{STATUS[t.status] ?? t.status}</span>
+        <span key={t.status} className={`st st-${t.status}`}>{STATUS[t.status] ?? t.status}</span>
       </div>
+      <p key={now.text} className={`th-now ${now.tone}`} aria-live="polite"><i aria-hidden="true" />{now.text}</p>
       <div className="th-k">Safety checks</div>
       <ul className="proto" aria-label="Safety checks">
-        {protocol(t, listing).map((c) => <li key={c.k} className={c.state}>
-          <i aria-hidden="true">{c.state === "ok" ? "✓" : c.state === "blocked" ? "!" : ""}</i>{c.k}</li>)}
+        {/* Keyed by position so a chip keeps its node and cross-fades when its state flips; the dot remounts to replay its tick. */}
+        {protocol(t, listing).map((c, i) => <li key={i} className={c.state} style={{ "--i": i } as CSSProperties}>
+          <i key={c.state} aria-hidden="true">{c.state === "ok" ? "✓" : c.state === "blocked" ? "!" : ""}</i>{c.k}</li>)}
       </ul>
-      {(() => { const d = deal(t, listing); if (!d) return null; const save = d.offered ? d.asked - d.offered : 0; return (
-        <div className="deal">
-          {d.listed && <div><span>Listed</span><b>${d.listed.toLocaleString("en-US")}</b></div>}
-          <div className="asked"><span>They asked</span><b>${d.asked.toLocaleString("en-US")}</b></div>
-          <div className={d.offered ? "offer" : "pending"}><span>{t.status === "booked" ? "Agent got" : "Agent offered"}</span><b>{d.offered ? `$${d.offered.toLocaleString("en-US")}` : "…"}</b></div>
-          {save > 0 && <div className="save"><span>You save</span><b>${save.toLocaleString("en-US")}/mo</b></div>}
-        </div>); })()}
-      {t.messages.length > 3 && <button className="th-more" onClick={() => setAll(!all)}>{all ? "Show latest only" : `Show ${t.messages.length - 3} earlier`}</button>}
-      <div className="th-msgs">
-        {msgs.map((x, i) => <Bubble key={x.id ?? `${x.at}-${i}`} x={x} />)}
+      {d && <div className="deal">
+        {d.listed && <div className="listed"><span>Listed</span><b>{usd(d.listed)}</b></div>}
+        <div className={`asked${d.offered ? " struck" : ""}`}><span>They asked</span><b>{usd(d.asked)}</b></div>
+        <div className={d.offered ? "offer" : "pending"}><span>{t.status === "booked" ? "Agent got" : "Agent offered"}</span><b key={d.offered ?? "p"}>{d.offered ? usd(d.offered) : "…"}</b></div>
+        {/* Always rendered so the bar never reflows when the saving lands. */}
+        <div className={save > 0 ? "save" : "save pending"}><span>You save</span><b key={save}>{save > 0 ? `${usd(save)}/mo` : "…"}</b></div>
+      </div>}
+      {(msgs.length > 0 || replying) && <div className="th-msgs">
+        {msgs.map((x, i) => <Bubble key={x.id ?? `${x.at}-${i}`} x={x} last={i === msgs.length - 1} onTyped={i === msgs.length - 1 ? reveal : undefined} />)}
         {replying && <div className="bub ag replying"><div className="bub-who">Your agent, as you</div><div className="typing"><i /><i /><i /></div><span className="replying-t">Reading the reply and checking your calendar</span></div>}
+      </div>}
+      <div className="th-foot">
+        <button className="th-more" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? "Hide the emails" : `See the emails (${t.messages.length})`}</button>
+        {open && t.messages.length > 3 && <button className="th-more" onClick={() => setAll(!all)}>{all ? "Latest only" : `${t.messages.length - 3} earlier`}</button>}
       </div>
     </div>
   );
 }
 
-export function Inbox({ threads, listings = [] }: { threads: Thread[]; listings?: RankedListing[] }) {
-  return <>{threads.map((t) => <ThreadCard key={t.id} t={t} listing={listings.find((l) => l.id === t.listingId)} />)}</>;
+export function Inbox({ threads, listings = [], events = [] }: { threads: Thread[]; listings?: RankedListing[]; events?: Ev[] }) {
+  return <>{threads.map((t) => {
+    const title = cleanTitle(t.listingTitle);
+    return <ThreadCard key={t.id} t={t} listing={listings.find((l) => l.id === t.listingId)} ev={events.find((e) => cleanTitle(e.title) === title)} />;
+  })}</>;
 }

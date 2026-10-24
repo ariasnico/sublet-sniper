@@ -227,7 +227,9 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
     for (const n of needs) {
       const nu = ids(n).filter((id) => !seenNeeds.current!.has(id));
       if (!nu.length) continue;
-      nu.forEach((id) => seenNeeds.current!.add(id)); fresh = true;
+      nu.forEach((id) => seenNeeds.current!.add(id));
+      if (n.kind === "craigslist_replies") continue; // optional, never interrupt for it
+      fresh = true;
       toast.warning("Your agent needs you", { description: needCopy(n).title });
     }
     // On a phone, jump straight to the card that needs a tap.
@@ -384,7 +386,8 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
   };
   const events = s?.events ?? [];
   const dealsEmpty = !needs.length && !events.length && !threads.length;
-  const needCount = needs.reduce((n, x) => n + (x.items?.length ?? 1), 0);
+  // Craigslist drafts are optional (a human must click Reply there); only real decisions count as "needs you".
+  const needCount = needs.filter((x) => x.kind !== "craigslist_replies").reduce((n, x) => n + (x.items?.length ?? 1), 0);
   const listingOf = (approvalId?: string, listingId?: string) => {
     const lid = listingId ?? s?.approvals.find((a) => a.id === approvalId)?.listingId;
     return lid ? mapListings.find((l) => l.id === lid) : undefined;
@@ -492,7 +495,7 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
 
         <section className="col col-inbox">
           <div className="panel side">
-            <div className="ph"><div><h2>Deals in progress</h2><small>Each landlord your agent is talking to, as you</small></div>
+            <div className="ph"><div><h2>Your agent at work</h2><small className="side-sub">Your agent emails landlords as you, negotiates and books. You don&apos;t need to do anything here unless it asks.</small></div>
               <span className="grow" />
               {savedPerMonth > 0 && <span className="saved-pill" title="Negotiated off the asking rent">Saving you ${savedPerMonth.toLocaleString("en-US")}/mo</span>}
               {needCount > 0 && <span className="badge" title="Needs you">{needCount}</span>}</div>
@@ -500,20 +503,22 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
               <span>Simulate landlord</span>
               {["hello", "video", "slot", "scam"].map((p) => <button key={p} className="ghost xs" onClick={() => void landlord(p)}>{p}</button>)}</div>}
             <div className="scroll">
-              {/* Once a viewing is booked it is the headline; leftover asks go below it. */}
-              {!events.length && needCards}
+              {/* Once a viewing is booked it is the headline; leftover asks go below it.
+                  Craigslist hand-offs are a side task: they sit under the live threads so the negotiation stays in view. */}
+              {!events.length && needCards.filter((_, i) => needs[i].kind !== "craigslist_replies")}
               {events.map((e) => {
                 const d = new Date(e.start);
-                return <div key={e.id} className="ticket-card">
-                  <div className="cal sm"><span>{d.toLocaleString("en-US", { timeZone: LA, month: "short" })}</span><b>{d.toLocaleString("en-US", { timeZone: LA, day: "numeric" })}</b></div>
-                  <div><div className="tk">Viewing booked</div><div className="tw">{fmtLong(e.start)}</div><div className="tt">{clean(e.title)}</div>
+                return <div key={e.id} className="ticket-card hero">
+                  <div className="cal sm" aria-hidden="true"><span>{d.toLocaleString("en-US", { timeZone: LA, month: "short" })}</span><b>{d.toLocaleString("en-US", { timeZone: LA, day: "numeric" })}</b></div>
+                  <div className="tk-body"><div className="tk"><i aria-hidden="true">✓</i>Viewing booked</div><div className="tw">{fmtLong(e.start)}</div><div className="tt">{clean(e.title)}</div>
                     <div className="tn">Pay nothing before you see it.</div>
-                    <div className="tk-actions">{e.link ? <a href={e.link} target="_blank" rel="noreferrer">Open in Google Calendar</a> : <a href={gcalLink(e)} target="_blank" rel="noreferrer">Add to Google Calendar</a>}
+                    <div className="tk-actions">{e.link ? <a className="tk-primary" href={e.link} target="_blank" rel="noreferrer">Open in Google Calendar</a> : <a className="tk-primary" href={gcalLink(e)} target="_blank" rel="noreferrer">Add to Google Calendar</a>}
                       <a href={icsHref(e)} download="viewing.ics">Download .ics</a></div></div>
                 </div>;
               })}
-              {events.length > 0 && needCards}
-              <Inbox threads={threads} listings={mapListings} />
+              {events.length > 0 && needCards.filter((_, i) => needs[i].kind !== "craigslist_replies")}
+              <Inbox threads={threads} listings={mapListings} events={events} />
+              {needCards.filter((_, i) => needs[i].kind === "craigslist_replies")}
               {dealsEmpty && <div className="empty deals-empty">
                 <svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true"><path d="M4 6.5h16v11H4z M4 7l8 6 8-6" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" /></svg>
                 <b>No deals yet</b>When your agent emails a landlord, the conversation, the price and the safety checks show up here.</div>}
@@ -555,25 +560,40 @@ function NeedCard({ n, listingOf, onApprove, onPaste }: { n: Need; listingOf: (a
   const listing = n.approvalId ? listingOf(n.approvalId) : undefined;
   const id = n.approvalId;
   const choices = (opts: string[]) => opts.map((o, i) => <button key={o} className={i === 0 ? "primary sm" : "ghost sm"} onClick={() => id && onApprove(id, true, o)}>{o}</button>);
+  const [open, setOpen] = useState(false);
+  // Craigslist hand-offs are optional extra reach, never the job: one quiet collapsed row at the bottom.
+  if (n.kind === "craigslist_replies") {
+    const items = n.items ?? [];
+    return (
+      <div className={`cl-opt${open ? " open" : ""}`}>
+        <div className="cl-row">
+          <span className="cl-k">Optional</span>
+          <p><b>{items.length} more Craigslist listing{items.length === 1 ? "" : "s"}.</b> Craigslist only lets a human click Reply; the messages are written.</p>
+          <button className="ghost xs" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? "Hide" : "Open drafts"}</button>
+        </div>
+        {open && <ul className="cl-items">
+          {items.map((d) => { const l = listingOf(d.approvalId, d.listingId); return (
+            <li key={d.approvalId}>
+              <div className="cl-t">{l ? short(l.title, 60) : "Craigslist listing"}{l?.priceMonthly ? <span>${l.priceMonthly.toLocaleString("en-US")}/mo</span> : null}</div>
+              <Draft text={d.message} hidden />
+              <div className="ap-actions"><button className="primary sm" onClick={() => onPaste(d)}>Open listing & paste</button><button className="ghost sm" onClick={() => onApprove(d.approvalId, false)}>Skip this one</button></div>
+            </li>); })}
+        </ul>}
+      </div>
+    );
+  }
   return (
     <div className={`ap need k-${n.kind}`}>
       <div className="ap-who"><span className="avatar sm"><Bot size={16} /></span>Your agent needs you{listing && <em>{short(listing.title, 44)}</em>}</div>
       <div className="ap-t">{c.title}</div>
       {c.body && <p className="ap-b">{c.body}</p>}
       {c.draft && <Draft text={c.draft} />}
-      {n.kind === "craigslist_replies" ? <ul className="cl-items">
-        {(n.items ?? []).map((d) => { const l = listingOf(d.approvalId, d.listingId); return (
-          <li key={d.approvalId}>
-            <div className="cl-t">{l ? short(l.title, 60) : "Craigslist listing"}{l?.priceMonthly ? <span>${l.priceMonthly.toLocaleString("en-US")}/mo</span> : null}</div>
-            <Draft text={d.message} hidden />
-            <div className="ap-actions"><button className="primary sm" onClick={() => onPaste(d)}>Open listing & paste</button><button className="ghost sm" onClick={() => onApprove(d.approvalId, false)}>Skip this one</button></div>
-          </li>); })}
-      </ul> : <div className="ap-actions">
+      <div className="ap-actions">
         {n.kind === "autopilot_consent" ? choices(n.options?.length ? n.options : CONSENT)
           : n.kind === "decision" ? choices(n.options?.length ? n.options : ["Yes", "No"])
           : <><button className="primary sm" onClick={() => id && onApprove(id, true)}>{n.kind === "approve_send" ? "Approve & send" : n.kind === "confirm_booking" ? "Book it" : "Approve"}</button>
             <button className="ghost sm" onClick={() => id && onApprove(id, false)}>Not now</button></>}
-      </div>}
+      </div>
     </div>
   );
 }
