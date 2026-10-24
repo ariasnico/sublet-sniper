@@ -56,6 +56,10 @@ const CONSENT = ["Yes, go", "I'll approve each step"];
 const AP_TIP = "On: your agent emails safe landlords, negotiates and books. You only click Reply on real Craigslist listings.";
 const kindOf = (a: Approval) => a.kind as string;
 
+/** Time of the last Reset in this browser; servers drop sessions older than it (see ensureEpoch). */
+const resetMark = () => { try { return localStorage.getItem("sniper-reset-at") ?? ""; } catch { return ""; } };
+const withMark = <X extends object>(snap: X | null) => ({ ...(snap ?? {}), resetAt: resetMark() });
+
 async function post<T>(url: string, body?: unknown, timeoutMs = 60000): Promise<T> {
   const r = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body ?? {}), signal: AbortSignal.timeout(timeoutMs) });
   return (await r.json()) as T;
@@ -151,9 +155,9 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
     if (b && (b.version ?? "") > (next.version ?? "")) { const merged = { ...b, threads: next.threads, modes: next.modes, autopilot: next.autopilot ?? b.autopilot }; best.current = merged; setS(merged); return; }
     best.current = next; setS(next);
   }, []);
-  const refresh = useCallback(async () => { const r = await fetch("/api/state", { cache: "no-store" }); adopt((await r.json()) as S); }, [adopt]);
+  const refresh = useCallback(async () => { const r = await fetch(`/api/state?resetAt=${encodeURIComponent(resetMark())}`, { cache: "no-store" }); adopt((await r.json()) as S); }, [adopt]);
   const call = useCallback(async <T,>(url: string, body: Record<string, unknown> = {}) => {
-    const r = await post<T & { state?: S }>(url, { ...body, snapshot: best.current ?? undefined });
+    const r = await post<T & { state?: S }>(url, { ...body, snapshot: withMark(best.current) });
     adopt(r.state);
     return r;
   }, [adopt]);
@@ -333,7 +337,7 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
   const toggleAutopilot = async () => {
     const on = !apOn; setApLocal(on);
     try {
-      const r = await fetch("/api/autopilot", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ on, snapshot: best.current ?? undefined }), signal: AbortSignal.timeout(15000) });
+      const r = await fetch("/api/autopilot", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ on, snapshot: withMark(best.current) }), signal: AbortSignal.timeout(15000) });
       if (!r.ok) throw new Error(String(r.status));
       const j = (await r.json().catch(() => ({}))) as { state?: S };
       adopt(j.state);

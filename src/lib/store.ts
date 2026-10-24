@@ -48,7 +48,21 @@ function fresh(): State {
 
 const g = globalThis as unknown as { __sniper?: State };
 export function state(): State { return (g.__sniper ??= fresh()); }
-export function resetState() { g.__sniper = fresh(); }
+export function resetState() { g.__sniper = fresh(); epoch.bornAt = new Date().toISOString(); }
+
+/**
+ * Serverless: Reset only reaches one instance. The browser sends the time of its last Reset with every
+ * request; an instance whose session predates it starts fresh instead of serving the old conversation.
+ */
+const epoch = (globalThis as unknown as { __sniperEpoch?: { bornAt: string } }).__sniperEpoch ??= { bornAt: "" };
+(globalThis as unknown as { __sniperEpoch?: { bornAt: string } }).__sniperEpoch = epoch;
+export function ensureEpoch(resetAt: unknown) {
+  if (typeof resetAt !== "string" || !resetAt || resetAt <= epoch.bornAt) return;
+  const s = state();
+  const stale = s.chat.some((c) => c.at < resetAt) || s.timeline.some((t) => t.at < resetAt);
+  if (stale) g.__sniper = fresh();
+  epoch.bornAt = resetAt;
+}
 
 let n = 0;
 export const uid = (p: string) => `${p}-${Date.now().toString(36)}-${(n++).toString(36)}`;
@@ -77,6 +91,7 @@ export type SessionSnapshot = Pick<State, "criteria" | "results" | "flagged" | "
  */
 export function hydrate(snap: unknown) {
   if (!snap || typeof snap !== "object") return;
+  ensureEpoch((snap as { resetAt?: unknown }).resetAt);
   const x = snap as Partial<SessionSnapshot>;
   if (!Array.isArray(x.timeline) || !Array.isArray(x.chat) || !Array.isArray(x.results) || !Array.isArray(x.flagged) || !Array.isArray(x.approvals)) return;
   const s = state();

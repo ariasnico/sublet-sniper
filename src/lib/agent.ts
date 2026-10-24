@@ -109,6 +109,9 @@ export async function chat(text: string): Promise<string> {
     // The user stated criteria: autopilot starts outreach now (narrated in chat), or we ask the one-time consent.
     if (s.autopilot.on) await autopilotOutreach();
     else requestAutopilotConsent();
+  } else if (s.results.length && !s.autopilot.decided) {
+    // The LLM may answer from results it already has (or this instance was hydrated): still ask once.
+    requestAutopilotConsent();
   }
   return reply;
 }
