@@ -19,7 +19,7 @@ interface Modes { llm: string; mail: string; calendar: string; craigslist: strin
 interface S { version?: string; analyzedId?: string | null; criteria?: Criteria | null; results: RankedListing[]; flagged: RankedListing[]; timeline: TimelineItem[]; approvals: Approval[]; threads: Thread[]; chat: ChatMsg[];
   events: { id: string; title: string; start: string; end?: string; link?: string }[]; modes: Modes; searchReport: { mode: string; total: number } | null }
 
-interface SR { lang: string; interimResults: boolean; onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null; onend: (() => void) | null; start(): void; stop(): void }
+interface SR { lang: string; interimResults: boolean; continuous?: boolean; onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }> & { isFinal: boolean }> }) => void) | null; onend: (() => void) | null; start(): void; stop(): void }
 type SRCtor = new () => SR;
 
 const LA = "America/Los_Angeles";
@@ -74,6 +74,7 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
   const [busy, setBusy] = useState(false);
   const [searching, setSearching] = useState(false);
   const [listening, setListening] = useState(false);
+  const [heard, setHeard] = useState("");
   const [speak, setSpeak] = useState(true);
   const [lang, setLang] = useState("es-AR");
   const [tab, setTab] = useState<"ranked" | "flagged">("ranked");
@@ -197,9 +198,15 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
     const C = w.SpeechRecognition ?? w.webkitSpeechRecognition;
     if (!C) { toast.error("Voice needs Chrome", { description: "Speech recognition isn't supported in this browser. Type instead." }); return; }
     if (listening) { recRef.current?.stop(); return; }
-    const rec = new C(); rec.lang = lang; rec.interimResults = false;
-    rec.onresult = (e) => { const t = Array.from(e.results).map((r) => r[0].transcript).join(" "); void send(t); };
-    rec.onend = () => setListening(false);
+    const rec = new C(); rec.lang = lang; rec.interimResults = true;
+    let sent = false; setHeard("");
+    rec.onresult = (e) => {
+      const rs = Array.from(e.results);
+      const t = rs.map((r) => r[0].transcript).join(" ").trim();
+      setHeard(t);
+      if (!sent && rs.length && rs.every((r) => r.isFinal)) { sent = true; rec.stop(); void send(t); }
+    };
+    rec.onend = () => { setListening(false); setTimeout(() => setHeard(""), 400); };
     recRef.current = rec; setListening(true); rec.start();
   };
   const approve = async (id: string, ok: boolean, answer?: string) => {
@@ -271,6 +278,10 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
               {typing && <div className="chatline"><span className="avatar"><Bot size={20} /></span><div className="msg assistant typing"><i /><i /><i /></div></div>}
               <div ref={chatEnd} />
             </div>
+            {(listening || heard) && <div className={`listen${listening ? " on" : ""}`} aria-live="polite">
+              <div className="wave" aria-hidden="true">{Array.from({ length: 24 }, (_, i) => <i key={i} style={{ animationDelay: `${(i * 73) % 600}ms` }} />)}</div>
+              <p>{heard || (lang.startsWith("es") ? "Te escucho…" : "Listening…")}</p>
+            </div>}
             <form className="composer" onSubmit={(e) => { e.preventDefault(); void send(input); }}>
               <button type="button" className={`mic ${listening ? "on" : ""}`} onClick={mic} title={listening ? "Stop" : "Talk"} aria-label="Talk">
                 {listening ? <span className="bars"><i /><i /><i /><i /></span> : <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" /></svg>}
