@@ -1,0 +1,13 @@
+.login { min-height: 100dvh; display: grid; place-items: center; padding: 24px 16px; background: radial-gradient(1200px 500px at 50% -10%, var(--accent-soft), transparent 70%), var(--bg); }
+.login-card { width: 100%; max-width: 360px; background: var(--panel); border-radius: 22px; padding: 32px 28px 26px; box-shadow: var(--shadow), 0 0 0 1px var(--line); display: flex; flex-direction: column; gap: 14px; text-align: center; animation: login-in 260ms var(--ease-out) both; }
+.login-brand { display: inline-flex; align-self: center; }
+.login-card h1 { font-size: 19px; font-weight: 650; letter-spacing: -0.01em; margin: 2px 0 6px; }
+.login-card form { display: flex; flex-direction: column; gap: 10px; }
+.login-card button.lg { width: 100%; }
+.login-sent { margin: 0; color: var(--mute); background: var(--accent-soft); border-radius: 12px; padding: 12px 14px; }
+.login-or { display: flex; align-items: center; gap: 10px; color: var(--faint); font-size: 12px; }
+.login-or::before, .login-or::after { content: ""; flex: 1; height: 1px; background: var(--line-strong); }
+.login-error { margin: 0; color: var(--red); font-size: 13px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+@keyframes login-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .login-card { animation: none; } }

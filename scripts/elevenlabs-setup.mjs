@@ -39,7 +39,7 @@ const TOOLS = [
           start_iso: { type: "string", description: "Same time as ISO 8601 with the Pacific offset if you are sure, e.g. 2026-10-26T17:30:00-07:00. Optional." },
           agreed_rent: { type: "number", description: "Monthly rent agreed on the call in US dollars, e.g. 3600. Never above the budget." },
           notes: { type: "string", description: "Anything else agreed (video tour, leaseholder proof). Optional." },
-          call_id: dyn("call_id"), thread_id: dyn("thread_id"), am_thread_id: dyn("am_thread_id"), listing_id: dyn("listing_id"),
+          call_id: dyn("call_id"), thread_id: dyn("thread_id"), am_thread_id: dyn("am_thread_id"), listing_id: dyn("listing_id"), user_id: dyn("user_id"),
         },
         required: ["spoken_time", "agreed_rent"],
       },
@@ -50,7 +50,7 @@ const TOOLS = [
     description: "Get the renter's next free viewing times (Pacific). Use it when the landlord asks when the renter is available.",
     api_schema: {
       url: toolUrl("get_free_slots"), method: "POST", request_headers: { "x-voice-token": DRY ? "<WEBHOOK_TOKEN>" : TOKEN },
-      request_body_schema: { type: "object", description: "Free slots request", properties: { tool: { type: "string", constant_value: "get_free_slots" }, call_id: dyn("call_id") }, required: [] },
+      request_body_schema: { type: "object", description: "Free slots request", properties: { tool: { type: "string", constant_value: "get_free_slots" }, call_id: dyn("call_id"), user_id: dyn("user_id") }, required: [] },
     },
   },
 ];
@@ -97,7 +97,7 @@ const FIRST_MESSAGE = `Hi! This is Sniper, an AI assistant calling for {{renter_
 
 const PLACEHOLDERS = { renter_profile: "- Software founder in SF for a 6-week work stint. Quiet, tidy, non-smoker, no pets. Landlord and employer references available.", callback_number: "+1 415 582 1858", renter_email: "sublet-sniper@agentmail.to", landlord_name: "there", listing_title: "Furnished 1BR sublet near Caltrain", listed_rent: 3600, target_rent: 3400, max_budget: 4000,
   renter_name: RENTER, renter_first_name: FIRST, move_in: "November 1", move_out: "December 15", free_slots: "Monday 6:00 PM PT", today: "Saturday, October 24, 2026",
-  call_id: "test", thread_id: "", am_thread_id: "", listing_id: "demo-mission-bay" };
+  call_id: "test", thread_id: "", am_thread_id: "", listing_id: "demo-mission-bay", user_id: "" };
 
 function agentBody(toolIds, withDataCollection = true) {
   return {

@@ -4,6 +4,7 @@ import { demoListings } from "./demo";
 import { detectRedFlags, stripQuoted } from "./landlord";
 import { laInstant } from "./time";
 import { sessionStart, state, type Thread, type ThreadMsg } from "./store";
+import { TENANT_TAG, currentTenant, ownsSubject } from "./tenant-ctx";
 
 export const SUBJECT_TAG = "[Sublet Sniper demo]";
 export const HANDLED = "sniper-handled";
@@ -12,14 +13,19 @@ export interface PendingInbound { messageId: string; threadId: string; from: str
 
 interface AmMsg { message_id?: string; from?: string; to?: string[]; labels?: string[]; text?: string; extracted_text?: string; timestamp?: string; subject?: string }
 
-let lastSync = 0;
-let pending: PendingInbound[] = [];
-let inflight: Promise<PendingInbound[]> | null = null;
-/** Per-instance cache: short so a reply handled by the webhook shows on the UI's next 2.5s /api/state poll. */
+/** Per-instance, per-tenant cache: short so a reply handled by the webhook shows on the UI's next 2.5s /api/state poll. */
+interface SyncCache { lastSync: number; pending: PendingInbound[]; inflight: Promise<PendingInbound[]> | null }
+const caches = new Map<string, SyncCache>();
+const sc = (): SyncCache => {
+  const k = currentTenant()?.userId ?? "";
+  let c = caches.get(k);
+  if (!c) caches.set(k, (c = { lastSync: 0, pending: [], inflight: null }));
+  return c;
+};
 const TTL_MS = 3_000;
 
 /** Forces the next syncThreads() to hit AgentMail (call after handling a message). */
-export function bustSync() { lastSync = 0; }
+export function bustSync() { sc().lastSync = 0; }
 
 /**
  * Rebuilds mail threads from AgentMail itself so they survive serverless cold starts and
@@ -28,11 +34,12 @@ export function bustSync() { lastSync = 0; }
  */
 export async function syncThreads(force = false): Promise<PendingInbound[]> {
   if (!mailLive()) return [];
-  if (!force && Date.now() - lastSync < TTL_MS) return pending;
+  const c = sc();
+  if (!force && Date.now() - c.lastSync < TTL_MS) return c.pending;
   // Concurrent non-forced callers on one instance share a single AgentMail round-trip.
-  if (!force && inflight) return inflight;
-  const run = doSync().finally(() => { if (inflight === run) inflight = null; });
-  if (!force) inflight = run;
+  if (!force && c.inflight) return c.inflight;
+  const run = doSync(c).finally(() => { if (c.inflight === run) c.inflight = null; });
+  if (!force) c.inflight = run;
   return run;
 }
 
@@ -68,8 +75,8 @@ export function derivedStatus(msgs: ThreadMsg[]): { status: Thread["status"]; bo
   return { status: lastLandlord ? "active" : "awaiting_landlord", bookedStart: null };
 }
 
-async function doSync(): Promise<PendingInbound[]> {
-  lastSync = Date.now();
+async function doSync(c: SyncCache): Promise<PendingInbound[]> {
+  c.lastSync = Date.now();
   const enc = encodeURIComponent(inboxId());
   const own = inboxId().toLowerCase();
   // labels=sent: the default listing omits threads that only contain our outgoing email (a just-contacted landlord).
@@ -78,7 +85,8 @@ async function doSync(): Promise<PendingInbound[]> {
   const s = state();
   const next: PendingInbound[] = [];
   for (const it of items) {
-    if (!String(it.subject ?? "").includes(SUBJECT_TAG)) continue;
+    // Shared inbox: only this tenant's threads ("#<short user id>" in the subject; untagged = the no-tenant session).
+    if (!String(it.subject ?? "").includes(SUBJECT_TAG) || !ownsSubject(String(it.subject ?? ""))) continue;
     // After a Reset, conversations from earlier sessions stay in AgentMail but are not part of this one
     // (otherwise the agent thinks it already wrote to that landlord and never starts the new deal).
     const since = sessionStart(); const touched = String(it.updated_at ?? it.timestamp ?? "");
@@ -89,7 +97,7 @@ async function doSync(): Promise<PendingInbound[]> {
     const firstOut = msgs.find((m) => fromAddress(String(m.from ?? "")) === own);
     const landlordEmail = fromAddress(String(firstOut?.to?.[0] ?? msgs.find((m) => fromAddress(String(m.from ?? "")) !== own)?.from ?? ""));
     const subject = String(full.subject ?? it.subject ?? "");
-    const bare = subject.replace(SUBJECT_TAG, "").replace(/^re:\s*/i, "").trim();
+    const bare = subject.replace(TENANT_TAG, "").replace(SUBJECT_TAG, "").replace(/^re:\s*/i, "").trim();
     const listing = demoListings().find((l) => l.title.includes(bare));
     const tmsgs: ThreadMsg[] = msgs.map((m) => {
       const mine = fromAddress(String(m.from ?? "")) === own;
@@ -126,7 +134,7 @@ async function doSync(): Promise<PendingInbound[]> {
       s.events.unshift({ id: `am-${d.bookedId ?? tid}`, title, start: d.bookedStart, end: new Date(Date.parse(d.bookedStart) + 45 * 60e3).toISOString() });
     }
   }
-  pending = next;
+  c.pending = next;
   return next;
 }
 
@@ -136,6 +144,7 @@ export async function claim(messageId: string): Promise<boolean> {
   const cur = await am(`/inboxes/${enc}/messages/${encodeURIComponent(messageId)}`);
   if ((Array.isArray(cur.labels) ? cur.labels.map(String) : []).includes(HANDLED)) return false;
   await am(`/inboxes/${enc}/messages/${encodeURIComponent(messageId)}`, { method: "PATCH", body: JSON.stringify({ add_labels: [HANDLED] }) });
-  pending = pending.filter((p) => p.messageId !== messageId);
+  const c = sc();
+  c.pending = c.pending.filter((p) => p.messageId !== messageId);
   return true;
 }

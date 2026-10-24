@@ -61,7 +61,9 @@ interface ElSession { endSession(): Promise<void> }
 interface ElClient { Conversation: { startSession(o: { signedUrl: string; dynamicVariables?: Record<string, string | number>; onConnect?: (p: { conversationId: string }) => void; onDisconnect?: () => void; onError?: (m: string) => void }): Promise<ElSession> } }
 
 /** Time of the last Reset in this browser; servers drop sessions older than it (see ensureEpoch). */
-const resetMark = () => { try { return localStorage.getItem("sniper-reset-at") ?? ""; } catch { return ""; } };
+/** Per-user key: a Reset by one account in this browser must not hide another account's threads. */
+let RESET_KEY = "sniper-reset-at";
+const resetMark = () => { try { return localStorage.getItem(RESET_KEY) ?? ""; } catch { return ""; } };
 const withMark = <X extends object>(snap: X | null) => ({ ...(snap ?? {}), resetAt: resetMark() });
 
 type CallLite = { id: string; status: string; transcript: unknown[] };
@@ -74,8 +76,11 @@ function mergeCallLists<C extends CallLite>(a: C[] | undefined, b: C[] | undefin
   return [...out.values()];
 }
 
+/** Session expired (multi-tenant): back to the login page. */
+const signedOut = (r: Response) => { if (r.status === 401) location.assign("/login"); };
 async function post<T>(url: string, body?: unknown, timeoutMs = 60000): Promise<T> {
   const r = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body ?? {}), signal: AbortSignal.timeout(timeoutMs) });
+  signedOut(r);
   return (await r.json()) as T;
 }
 
@@ -138,7 +143,8 @@ function deriveNowNext(s: S | null, threads: Thread[], pending: Approval[], busy
   return busy ? { now: "Thinking…", next: base.next } : base;
 }
 
-export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: string | null }) {
+export default function Dashboard({ elevenLabsAgentId, user = null }: { elevenLabsAgentId: string | null; user?: { id: string; email: string | null; guest: boolean } | null }) {
+  if (user) RESET_KEY = `sniper-reset-at:${user.id}`;
   const [s, setS] = useState<S | null>(null);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -172,7 +178,7 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
     if (b && (b.version ?? "") > (next.version ?? "")) { const merged = { ...b, threads: next.threads, modes: next.modes, autopilot: next.autopilot ?? b.autopilot, calls }; best.current = merged; setS(merged); return; }
     best.current = { ...next, calls }; setS(best.current);
   }, []);
-  const refresh = useCallback(async () => { const r = await fetch(`/api/state?resetAt=${encodeURIComponent(resetMark())}`, { cache: "no-store" }); adopt((await r.json()) as S); }, [adopt]);
+  const refresh = useCallback(async () => { const r = await fetch(`/api/state?resetAt=${encodeURIComponent(resetMark())}`, { cache: "no-store" }); signedOut(r); adopt((await r.json()) as S); }, [adopt]);
   const call = useCallback(async <T,>(url: string, body: Record<string, unknown> = {}) => {
     const r = await post<T & { state?: S }>(url, { ...body, snapshot: withMark(best.current) });
     adopt(r.state);
@@ -195,7 +201,7 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
 
   // Reset hides AgentMail threads with no activity after the reset (they're rebuilt from the inbox).
   const [resetAt, setResetAt] = useState("");
-  useEffect(() => { setResetAt(localStorage.getItem("sniper-reset-at") ?? ""); }, []);
+  useEffect(() => { setResetAt(resetMark()); }, []);
   const threads = useMemo(() => (s?.threads ?? []).filter((t) => !resetAt || t.messages.some((x) => x.at > resetAt)), [s?.threads, resetAt]);
   const pending = useMemo(() => (s?.approvals ?? []).filter((a) => a.status === "pending")
     .sort((a, b) => Number(kindOf(b) === "autopilot_consent") - Number(kindOf(a) === "autopilot_consent")), [s?.approvals]);
@@ -376,7 +382,7 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
   }, [calling, call]);
   const contact = async (id: string) => { setMobile("chat"); await send(`Contact listing ${id}`).catch(() => undefined); };
   const landlord = async (preset: string) => { const r = await post<{ error?: string }>("/api/demo/landlord", { preset }); if (r.error) toast.error(r.error); void refresh(); };
-  const reset = async () => { const at = new Date().toISOString(); localStorage.setItem("sniper-reset-at", at); setResetAt(at); await post("/api/reset"); best.current = null; seen.current = null; seenNeeds.current = null; setView("list"); void refresh(); toast("Fresh start", { description: "Session cleared." }); };
+  const reset = async () => { const at = new Date().toISOString(); try { localStorage.setItem(RESET_KEY, at); } catch { /* private mode */ } setResetAt(at); await post("/api/reset"); best.current = null; seen.current = null; seenNeeds.current = null; setView("list"); void refresh(); toast("Fresh start", { description: "Session cleared." }); };
 
   // Autopilot: the backend owns it when it reports s.autopilot; until then the toggle is optimistic and reverts on failure.
   const apOn = apLocal ?? s?.autopilot?.on ?? false;
@@ -470,6 +476,10 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
             </div>
           </div>
         </details>}
+        {user && <form className="who" action="/auth/signout" method="post">
+          <span className="who-email" title={user.email ?? "Guest"}>{user.guest ? "Guest" : user.email}</span>
+          <button className="ghost xs" type="submit">Sign out</button>
+        </form>}
       </header>
 
       <Mission criteria={s?.criteria} scanned={scanned} shown={s?.results.length ?? 0} flagged={s?.flagged.length ?? 0} threads={threads}

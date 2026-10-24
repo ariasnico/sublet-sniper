@@ -55,7 +55,11 @@ npm run build
 
 Modes (shown as pills in the header): with no keys you get the deterministic offline agent (Spanish/English), live Craigslist (or `CRAIGSLIST_LIVE=0` for snapshot), mock mail with "Simulate DEMO landlord" buttons, mock calendar, and browser voice. Add keys to go live, see `.env.example` for where to get each one.
 
-**Deploy to Vercel:** import the repo, add env vars, done. Note: the store is in-memory (per server instance), which is fine for a demo but not for production.
+**Deploy to Vercel:** import the repo, add env vars, done. Without Supabase env vars the app is single-tenant (one in-memory session per server instance).
+
+**Accounts (multi-tenant, Supabase):** with `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (or `_ANON_KEY`) + `SUPABASE_SERVICE_ROLE_KEY` set, `/app` requires sign-in (`/login`: email magic link, or **Continue as guest** = Supabase anonymous sign-in, falling back to a throwaway confirmed user if anonymous sign-ins are off). Each user's whole session lives in `public.sessions` (one jsonb row, RLS: own row only); API routes run inside an AsyncLocalStorage tenant context (`src/lib/tenant.ts`, `src/lib/session.ts`), so `state()` is per user. The shared AgentMail inbox is split by a `#<8-hex user id>` tag on subjects plus `public.thread_index`; calls are routed by `public.call_index` and the `user_id` dynamic variable (re-run `scripts/elevenlabs-setup.mjs` to add it to the agent's tools). `/api/mcp` stays a shared, no-login demo tenant (the global session). `AUTH_MODE=off` forces single-tenant.
+- Schema: `supabase/migrations/*.sql`, applied with `node --env-file=.env.local scripts/migrate.mjs`. RLS check: `node --env-file=.env.local scripts/rls-smoke.mjs`.
+- Supabase dashboard (Authentication): Site URL `https://sublet-sniper.vercel.app`; redirect URLs `https://sublet-sniper.vercel.app/**`, `http://localhost:3005/**`; enable Anonymous sign-ins for the guest button. The built-in email sender is rate-limited (a few emails per hour, project-wide), so use **Continue as guest** for demos or configure custom SMTP.
 
 **AgentMail live:** create an inbox, set `AGENTMAIL_API_KEY`, `AGENTMAIL_INBOX_ID`, `DEMO_LANDLORD_EMAIL` (your teammate). On Vercel add a webhook to `https://<host>/api/mail/webhook?token=<WEBHOOK_TOKEN>` for `message.received`; locally press **Check mail**.
 
