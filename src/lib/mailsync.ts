@@ -12,6 +12,12 @@ interface AmMsg { message_id?: string; from?: string; to?: string[]; labels?: st
 
 let lastSync = 0;
 let pending: PendingInbound[] = [];
+let inflight: Promise<PendingInbound[]> | null = null;
+/** Per-instance cache: short so a reply handled by the webhook shows on the UI's next 2.5s /api/state poll. */
+const TTL_MS = 3_000;
+
+/** Forces the next syncThreads() to hit AgentMail (call after handling a message). */
+export function bustSync() { lastSync = 0; }
 
 /**
  * Rebuilds mail threads from AgentMail itself so they survive serverless cold starts and
@@ -20,7 +26,15 @@ let pending: PendingInbound[] = [];
  */
 export async function syncThreads(force = false): Promise<PendingInbound[]> {
   if (!mailLive()) return [];
-  if (!force && Date.now() - lastSync < 10_000) return pending;
+  if (!force && Date.now() - lastSync < TTL_MS) return pending;
+  // Concurrent non-forced callers on one instance share a single AgentMail round-trip.
+  if (!force && inflight) return inflight;
+  const run = doSync().finally(() => { if (inflight === run) inflight = null; });
+  if (!force) inflight = run;
+  return run;
+}
+
+async function doSync(): Promise<PendingInbound[]> {
   lastSync = Date.now();
   const enc = encodeURIComponent(inboxId());
   const own = inboxId().toLowerCase();
