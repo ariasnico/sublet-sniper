@@ -29,7 +29,13 @@ const money = (t: string) => [...t.replace(/,/g, "").matchAll(/\$\s?(\d{3,5})(?!
 export function deal(t: Thread, l?: RankedListing) {
   let asked: number | null = null, offered: number | null = null;
   for (const m of t.messages) {
-    if (m.from === "landlord" && !m.flagged) { const a = money(m.text).filter((x) => x >= 500 && x < 20000); if (a.length) { asked = a[0]; offered = null; } }
+    if (m.from === "landlord") {
+      // A flagged message can still quote the rent ("$3,800/mo ... Zelle a $7,600 deposit"): read only the monthly figure.
+      const rent = m.text.replace(/,/g, "").match(/\$\s?(\d{3,5})\s*(?:\/\s*mo|\/month|a month|per month)/i);
+      const a = m.flagged ? (rent ? [Number(rent[1])] : []) : money(m.text).filter((x) => x >= 500 && x < 20000);
+      // Accepting our counter ("$3,600 works") is not a new ask.
+      if (a.length && !(offered && a[0] === offered)) { asked = a[0]; offered = null; }
+    }
     if (m.from === "agent" && asked) { const o = m.text.replace(/,/g, "").match(/would you do \$(\d{3,5})|(?:offer|counter)[^$]{0,20}\$(\d{3,5})/i); const below = money(m.text).filter((x) => x < asked! && x >= 500); if (o) offered = Number(o[1] ?? o[2]); else if (below.length) offered = Math.min(...below); }
   }
   if (!asked) return null;

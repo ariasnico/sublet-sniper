@@ -206,7 +206,7 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
         return ev ? bookedMoment(t.listingTitle, ev.start) : { kind: "booked", title: clean(t.listingTitle), when: "Confirmed with the landlord", day: "✓", month: "Booked" };
       }]);
     }
-    for (const e of s.events) keys.push([`ev:${e.id}`, () => bookedMoment(clean(e.title), e.start)]);
+    for (const e of s.events) keys.push([`ev:${e.start}`, () => bookedMoment(clean(e.title), e.start)]); // by start: instances rebuild the same booking under different ids
     for (const t of s.timeline) if (t.kind === "flag" && /^Refused/.test(t.text)) keys.push([`tl:${t.id}`, () => ({ kind: "scam", title: t.text.replace(/^Refused to contact red listing /, "").replace(/"/g, ""), detail: "Your agent will not contact a listing it scored as a likely scam." })]);
     if (!seen.current) { seen.current = new Set(keys.map(([k]) => k)); return; }
     for (const [k, make] of keys) {

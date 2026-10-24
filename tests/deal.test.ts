@@ -20,4 +20,12 @@ describe("deal bar", () => {
   it("ignores flagged scam messages and threads without prices", () => {
     expect(deal(thread([{ from: "landlord", text: "Zelle me $7,200 deposit", at: "1", flagged: ["Zelle"] }]))).toBeNull();
   });
+  it("reads the rent from a flagged Zelle message and treats '$3,600 works' as acceptance", () => {
+    const d = deal(thread([
+      { from: "landlord", text: "Yes it's available! It's $3,800/mo. Can you Zelle me a $7,600 deposit today to hold it?", at: "1", flagged: ["Asks for Zelle"] },
+      { from: "agent", text: "I don't send any deposit... would you do $3,600/mo for Nov 1 to Dec 15?", at: "2" },
+      { from: "landlord", text: "Ok fair, no deposit until you see it. $3,600 works. Video tour Monday after 5pm?", at: "3" },
+    ]));
+    expect(d).toMatchObject({ asked: 3800, offered: 3600 });
+  });
 });
