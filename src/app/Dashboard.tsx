@@ -71,7 +71,7 @@ function Scanning() {
   return (
     <div className="scanning">
       <div className="radar"><i /><Bot size={44} /></div>
-      <ul>{SCAN_STEPS.map((t, k) => <li key={t} className={k < i ? "done" : k === i ? "now" : ""}>{k < i ? "✓" : k === i ? <span className="spin" /> : "·"} {t}</li>)}</ul>
+      <ul>{SCAN_STEPS.map((t, k) => <li key={t} className={k < i ? "done" : k === i ? "now" : ""} style={{ "--i": k } as React.CSSProperties}>{k < i ? "✓" : k === i ? <span className="spin" /> : "·"} {t}</li>)}</ul>
     </div>
   );
 }
@@ -424,14 +424,19 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
             <div className="scroll chat-scroll">
               {chat.length === 0 && <>
                 <div className="chatline"><span className="avatar"><Bot size={20} /></span><div className="msg assistant">¡Hola Nicolás! Contame qué buscás y yo me encargo: busco, filtro scams, hablo con los dueños y te agendo la visita.</div></div>
-                <div className="chips-col">{CHIPS.map((c) => <button key={c} className="suggest" onClick={() => void send(c)}>{c}</button>)}</div>
+                <div className="chips-col">{CHIPS.map((c, k) => <button key={c} className="suggest" style={{ "--i": k } as React.CSSProperties} onClick={() => void send(c)}>{c}</button>)}</div>
               </>}
-              {chat.map((c, i) => <div key={i} className={`chatline ${c.role}${c.auto ? " auto" : ""}`}>{c.role !== "user" && <span className="avatar"><Bot size={20} /></span>}
-                <div className={`msg ${c.role}`}>{c.auto && <span className="auto-k"><i aria-hidden="true" />Autopilot update</span>}{c.role === "assistant" ? <Rich text={c.text} /> : c.text}</div></div>)}
-              {consent?.approvalId && !typing && <div className="chat-cta">
+              {chat.map((c, i) => {
+                // Consecutive messages from one side read as a group: one avatar, on the last bubble, which keeps the tail.
+                const side = (x?: ChatMsg) => x && (x.role === "user" ? "user" : "agent");
+                const head = side(chat[i - 1]) !== side(c), tail = side(chat[i + 1]) !== side(c) && !(typing && c.role !== "user" && i === chat.length - 1);
+                return <div key={i} className={`chatline ${c.role}${c.auto ? " auto" : ""}${head ? "" : " cont"}${tail ? " tail" : ""}`}>{c.role !== "user" && <span className={`avatar${tail ? "" : " hold"}`} aria-hidden={!tail || undefined}>{tail && <Bot size={20} />}</span>}
+                <div className={`msg ${c.role}`}>{c.auto && !chat[i - 1]?.auto && <span className="auto-k"><i aria-hidden="true" />Autopilot update</span>}{c.role === "assistant" ? <Rich text={c.text} /> : c.text}</div></div>;
+              })}
+              {consent?.approvalId && !typing && <div className="chat-cta" role="group" aria-label="Let your agent run on autopilot?">
                 {(consent.options?.length ? consent.options : CONSENT).map((o, k) => <button key={o} className={k === 0 ? "primary sm" : "ghost sm"} onClick={() => void approve(consent.approvalId!, true, o)}>{o}</button>)}
               </div>}
-              {typing && <div className="chatline"><span className="avatar"><Bot size={20} /></span><div className="msg assistant typing"><i /><i /><i /></div></div>}
+              {typing && <div className={`chatline assistant tail${lastMsg && lastMsg.role !== "user" ? " cont" : ""}`} aria-label="Your agent is typing"><span className="avatar"><Bot size={20} /></span><div className="msg assistant typing"><i /><i /><i /></div></div>}
               <div ref={chatEnd} />
             </div>
             {(listening || heard) && <div className={`listen${listening ? " on" : ""}`} aria-live="polite">
