@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { RankedListing } from "@/lib/types";
 
 const LABEL = { green: "Looks safe", yellow: "Caution", red: "Likely scam" } as const;
@@ -21,16 +21,26 @@ export function RiskRing({ score, light, size = 46 }: { score: number; light: Ra
 export function ListingCard({ l, i, onContact, pinned, onHover }: { l: RankedListing; i?: number; onContact?: (id: string) => void; pinned?: boolean; onHover?: (id: string | null) => void }) {
   const [open, setOpen] = useState(l.scam.light === "red");
   const [imgOk, setImgOk] = useState(true);
-  const img = l.images?.[0];
+  const [fetched, setFetched] = useState<string | null | undefined>(undefined);
+  const [loaded, setLoaded] = useState(false);
+  const needsPhoto = !l.images?.length && l.source === "craigslist";
+  useEffect(() => {
+    if (!needsPhoto) return;
+    let alive = true;
+    fetch(`/api/photo?url=${encodeURIComponent(l.url)}`).then((r) => r.json()).then((j: { images?: string[] }) => { if (alive) setFetched(j.images?.[0] ?? null); }).catch(() => alive && setFetched(null));
+    return () => { alive = false; };
+  }, [needsPhoto, l.url]);
+  const img = l.images?.[0] ?? fetched ?? undefined;
+  const pendingPhoto = needsPhoto && fetched === undefined;
   const hood = l.neighborhood ?? l.hood ?? "San Francisco";
   return (
     <article className={`lc ${l.scam.light}${pinned ? " pinned" : ""}`} onMouseEnter={() => onHover?.(l.id)} onMouseLeave={() => onHover?.(null)}>
       {pinned && <div className="pin-banner">The link you pasted: scam risk {l.scam.score}/100{l.scam.light === "red" ? ". Do not pay anything." : ""}</div>}
       <div className="lc-main">
         <a className="lc-photo" href={l.url} target="_blank" rel="noreferrer">
-          {img && imgOk
+          {pendingPhoto ? <div className="lc-shimmer" /> : img && imgOk
             // eslint-disable-next-line @next/next/no-img-element
-            ? <img src={img} alt="" loading="lazy" onError={() => setImgOk(false)} />
+            ? <img src={img} alt="" loading="lazy" className={loaded ? "in" : ""} onLoad={() => setLoaded(true)} onError={() => setImgOk(false)} />
             : <div className="lc-ph"><svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true"><path d="M3.5 11 12 4l8.5 7M6 9.5V20h4.5v-5h3v5H18V9.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg><span>{hood}</span></div>}
           {i != null && <span className="lc-rank">#{i + 1}</span>}
           {l.scam.light === "red" && <span className="lc-stamp">SCAM</span>}
