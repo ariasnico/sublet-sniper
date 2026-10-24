@@ -50,7 +50,7 @@ const fmt = (iso: string) => new Date(iso).toLocaleString("en-US", { timeZone: L
 const fmtLong = (iso: string) => new Date(iso).toLocaleString("en-US", { timeZone: LA, weekday: "long", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) + " PT";
 const clean = (t: string) => t.replace(/^Viewing: /, "").replace(/^\[DEMO DATA\]\s*/, "");
 const short = (t: string, n = 38) => { const c = clean(t); return c.length > n ? `${c.slice(0, n - 1).trimEnd()}…` : c; };
-const GREETING = "¡Hola Nicolás! Contame qué buscás y yo me encargo: busco, filtro scams, hablo con los dueños y te agendo la visita.";
+const GREETING = "Hi Nicolás! Tell me what you need and I'll handle the rest.";
 const SCAN_STEPS = ["Scanning Craigslist sublets, rooms and apartments", "Normalizing prices to monthly", "Comparing every price to SF medians", "Checking photos for reuse across listings", "Looking for wire, Zelle and out-of-country red flags", "Ranking by fit, distance and dates"];
 const CONSENT = ["Yes, go", "I'll approve each step"];
 const AP_TIP = "On: your agent emails safe landlords, negotiates and books. You only click Reply on real Craigslist listings.";
@@ -132,7 +132,7 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
   const [listening, setListening] = useState(false);
   const [heard, setHeard] = useState("");
   const [speak, setSpeak] = useState(true);
-  const [lang, setLang] = useState("es-AR");
+  const [lang, setLang] = useState("en-US");
   const [tab, setTab] = useState<"ranked" | "flagged">("ranked");
   const [view, setView] = useState<"list" | "map">("list");
   const [mobile, setMobile] = useState<"chat" | "homes" | "inbox">("chat");
@@ -433,7 +433,7 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
       <main className="grid" data-m={mobile}>
         <section className="col col-chat">
           <div className="panel chat">
-            <div className="ph"><span className="avatar lg"><Bot size={26} /></span><div><h2>Talk to your agent</h2><small>{busy ? <><span className="live-dot" />Working…</> : "Spanish or English, voice or text"}</small></div></div>
+            <div className="ph"><span className="avatar lg"><Bot size={26} /></span><div><h2>Talk to your agent</h2>{busy && <small><span className="live-dot" />Working…</small>}</div></div>
             <div className="scroll chat-scroll">
               <ChatThread chat={chat} greeting={GREETING} typing={typing} idle={!busy && !listening}
                 consent={consent?.approvalId ? { options: consentOpts, onPick: (o) => void approve(consent.approvalId!, true, o) } : undefined}
@@ -455,7 +455,7 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
                 <button type="button" className={`c-tool${speak ? " on" : ""}`} aria-pressed={speak} aria-label="Speak replies" data-tip={speak ? "Speaking replies" : "Replies muted"} onClick={() => setSpeak(!speak)}>
                   <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" />{speak ? <path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" /> : <path d="M16 9.5l5 5M21 9.5l-5 5" />}</svg>
                 </button>
-                <select className="c-lang" value={lang} onChange={(e) => setLang(e.target.value)} aria-label="Voice language"><option value="es-AR">Español</option><option value="en-US">English</option></select>
+                <select className="c-lang" value={lang} onChange={(e) => setLang(e.target.value)} aria-label="Voice language"><option value="en-US">English</option><option value="es-AR">Español</option></select>
                 <span className="grow" />
                 <button className="send" disabled={busy || !input.trim()} aria-label="Send"><svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6" stroke="currentColor" strokeWidth="2.2" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
               </div>

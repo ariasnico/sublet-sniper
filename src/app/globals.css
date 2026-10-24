@@ -923,7 +923,7 @@ input[type="checkbox"] { width: auto; accent-color: var(--accent); box-shadow: n
 .chat .c-tools .mic.on { background: var(--red-dot); color: #fff; box-shadow: 0 0 0 3px rgba(239,68,68,.18); }
 .chat .c-tools .mic::after, .chat .c-tools .c-tool::after { left: 0; transform: translate(0, 3px); }
 .chat .c-tools .mic:focus-visible::after, .chat .c-tools .c-tool:focus-visible::after { transform: none; }
-.chat .c-lang { width: auto; height: 28px; padding: 0 8px; margin-left: 2px; border-radius: 8px; font-size: 12px; font-weight: 500; color: var(--mute); background: transparent; box-shadow: none; cursor: pointer; }
+.chat .c-lang { width: auto; height: 28px; padding: 0 26px 0 8px; margin-left: 2px; border-radius: 8px; font-size: 12px; font-weight: 500; color: var(--mute); background-color: transparent; box-shadow: none; cursor: pointer; }
 .chat .c-tools .send { width: 32px; height: 32px; padding: 0; display: grid; place-items: center; border-radius: 50%; color: #fff; background: var(--accent); box-shadow: 0 1px 2px rgba(194,65,12,.35); }
 .chat .c-tools .send:disabled { background: var(--sunk); color: var(--faint); box-shadow: none; opacity: 1; cursor: default; }
 .chat .c-tools .send svg { transition: transform 160ms var(--ease-out); }
