@@ -1,6 +1,8 @@
 import { mailLive } from "./config";
 import { am, fromAddress, inboxId } from "./mail";
 import { demoListings } from "./demo";
+import { detectRedFlags, stripQuoted } from "./landlord";
+import { laInstant } from "./time";
 import { sessionStart, state, uid, type Thread, type ThreadMsg } from "./store";
 
 export const SUBJECT_TAG = "[Sublet Sniper demo]";
@@ -34,6 +36,38 @@ export async function syncThreads(force = false): Promise<PendingInbound[]> {
   return run;
 }
 
+
+const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+/**
+ * The viewing the agent confirmed in an email ("Mon, Oct 26, 5:30 PM PT works for me ... on my calendar").
+ * Lets any serverless instance rebuild the booking from AgentMail, not only the one that handled the reply.
+ */
+export function bookedStartFrom(text: string, now = new Date()): string | null {
+  if (!/on my calendar/i.test(text)) return null;
+  const m = text.match(/\b(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun), (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) (\d{1,2}), (\d{1,2}):(\d\d)\s?(AM|PM) PT/i);
+  if (!m) return null;
+  const month = MONTHS.indexOf(m[1].toLowerCase());
+  let year = now.getUTCFullYear();
+  if (month < now.getUTCMonth() - 6) year++;
+  const hour = (Number(m[3]) % 12) + (m[5].toUpperCase() === "PM" ? 12 : 0);
+  return laInstant(`${year}-${String(month + 1).padStart(2, "0")}-${m[2].padStart(2, "0")}`, hour, Number(m[4]));
+}
+
+/** Thread status read from the emails themselves (same rules the replying instance applied). */
+export function derivedStatus(msgs: ThreadMsg[]): { status: Thread["status"]; bookedStart: string | null; bookedId?: string } {
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    const m = msgs[i];
+    if (m.from !== "agent") continue;
+    const start = bookedStartFrom(m.text);
+    if (start) return { status: "booked", bookedStart: start, bookedId: m.id };
+  }
+  const last = msgs[msgs.length - 1];
+  const lastLandlord = [...msgs].reverse().find((m) => m.from === "landlord");
+  if (lastLandlord?.flagged?.length) return { status: "flagged", bookedStart: null };
+  if (last?.from === "agent" && /any of these \(Pacific time\)|could any of these work/i.test(last.text)) return { status: "viewing_proposed", bookedStart: null };
+  return { status: lastLandlord ? "active" : "awaiting_landlord", bookedStart: null };
+}
+
 async function doSync(): Promise<PendingInbound[]> {
   lastSync = Date.now();
   const enc = encodeURIComponent(inboxId());
@@ -59,8 +93,10 @@ async function doSync(): Promise<PendingInbound[]> {
     const tmsgs: ThreadMsg[] = msgs.map((m) => {
       const mine = fromAddress(String(m.from ?? "")) === own;
       const text = String((mine ? m.text : m.extracted_text ?? m.text) ?? "").trim();
-      return { id: m.message_id, from: mine ? "agent" : "landlord", text, at: String(m.timestamp ?? "") };
+      const flags = mine ? [] : detectRedFlags(stripQuoted(text));
+      return { id: m.message_id, from: mine ? "agent" : "landlord", text, at: String(m.timestamp ?? ""), flagged: flags.length ? flags : undefined };
     });
+    const d = derivedStatus(tmsgs);
     for (const m of msgs) {
       const from = fromAddress(String(m.from ?? ""));
       if (from !== own && !(m.labels ?? []).includes(HANDLED) && m.message_id)
@@ -72,10 +108,15 @@ async function doSync(): Promise<PendingInbound[]> {
       id: existing?.id ?? uid("th"), listingId: existing?.listingId ?? listing?.id ?? "demo-mission-bay",
       listingTitle: existing?.listingTitle ?? listing?.title ?? bare, landlordEmail, subject,
       messages: tmsgs, agentmailThreadId: tid, lastMessageId: last?.message_id,
-      status: existing?.status ?? (tmsgs.some((m) => m.from === "landlord") ? "active" : "awaiting_landlord"),
+      // A booking survives later messages; otherwise trust what the emails say (the reply may have been handled elsewhere).
+      status: existing?.status === "booked" ? "booked" : d.status,
       askedProof: existing?.askedProof ?? true, offeredSlots: existing?.offeredSlots,
     };
     if (existing) Object.assign(existing, derived); else s.threads.push(derived);
+    if (d.bookedStart && !s.events.some((e) => e.start === d.bookedStart)) {
+      const title = `Viewing: ${derived.listingTitle}`;
+      s.events.unshift({ id: `am-${d.bookedId ?? tid}`, title, start: d.bookedStart, end: new Date(Date.parse(d.bookedStart) + 45 * 60e3).toISOString() });
+    }
   }
   pending = next;
   return next;
