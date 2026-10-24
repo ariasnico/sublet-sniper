@@ -213,7 +213,7 @@ export function autopilotView(s: State): AutopilotView {
       "Pido video en vivo y prueba de que es el titular, y agendo la primera visita libre.");
   }
   const waiting = live.filter((t) => t.status === "awaiting_landlord");
-  if (waiting.length) return v("waiting", `Esperando respuesta de ${waiting.length === 1 ? `el dueño de ${name(waiting[0])}` : `${waiting.length} dueños`}.`,
+  if (waiting.length) return v("waiting", `Esperando respuesta ${waiting.length === 1 ? `del dueño de ${name(waiting[0])}` : `de ${waiting.length} dueños`}.`,
     `Cuando respondan, negocio el precio (tope ${usd(s.profile.maxBudget)}), pido pruebas y agendo la visita.`);
   if (stats.craigslistDrafts) return v("outreach", `Preparé ${stats.craigslistDrafts} mensajes para avisos de Craigslist.`, "Abrí cada aviso y tocá Reply; cuando el dueño te conteste, seguimos.");
   if (threads.some((t) => t.status === "flagged")) return v("outreach", "Descarté al dueño que pidió plata antes de la visita.", "Decime si amplío la búsqueda (zona o presupuesto) y sigo buscando.");

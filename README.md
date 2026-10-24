@@ -59,6 +59,34 @@ Modes (shown as pills in the header): with no keys you get the deterministic off
 
 **AgentMail live:** create an inbox, set `AGENTMAIL_API_KEY`, `AGENTMAIL_INBOX_ID`, `DEMO_LANDLORD_EMAIL` (your teammate). On Vercel add a webhook to `https://<host>/api/mail/webhook?token=<WEBHOOK_TOKEN>` for `message.received`; locally press **Check mail**.
 
+## Use it from your agent
+
+Sublet Sniper is agent-native: the web app and a remote **MCP server** (Streamable HTTP, stateless) share the same code and safety rules. Endpoint: `https://sublet-sniper.vercel.app/api/mcp`. Agent-readable overview: [`/llms.txt`](https://sublet-sniper.vercel.app/llms.txt).
+
+| MCP tool | What it does |
+|---|---|
+| `search_sublets` | `{ query?, maxBudget?, type?, furnished?, from?, to?, near? }` → top safe matches (id, title, $/mo, neighborhood, scam score + light, url, photo) and the scams it caught |
+| `check_listing_scam` | `{ url }` (Craigslist only) → score 0-100, light, structured signals, one-line verdict |
+| `contact_landlord` | `{ listingId }` → emails only the allowlisted demo landlord; for real Craigslist listings returns the draft + URL, a human clicks Reply |
+| `get_deals` | threads with status, negotiation (listed / asked / offered), safety checks, booked viewings with a Google Calendar link |
+| `ask_agent` | `{ message }` → the same chat agent as the web UI |
+
+**Claude Code**
+
+```bash
+claude mcp add --transport http sublet-sniper https://sublet-sniper.vercel.app/api/mcp
+# if the deployment sets MCP_TOKEN:
+claude mcp add --transport http sublet-sniper https://sublet-sniper.vercel.app/api/mcp --header "Authorization: Bearer $MCP_TOKEN"
+```
+
+**Claude Desktop / claude.ai:** Settings → Connectors → *Add custom connector* → name `Sublet Sniper`, URL `https://sublet-sniper.vercel.app/api/mcp`.
+
+**ChatGPT:** Settings → Apps & Connectors → Advanced → enable *Developer mode*, then *Create* a connector with URL `https://sublet-sniper.vercel.app/api/mcp` and authentication *No authentication*.
+
+Custom connectors in Claude and ChatGPT don't send static bearer headers, so leave `MCP_TOKEN` unset for them (demo mode). Set `MCP_TOKEN` to lock the endpoint to clients that can send `Authorization: Bearer <token>` (Claude Code, MCP Inspector, `mcp-remote --header`).
+
+Try it locally: `npx @modelcontextprotocol/inspector --cli http://localhost:3000/api/mcp --transport http --method tools/list`.
+
 ## 3-minute demo script
 
 1. **(0:00) Hook.** "In August someone wired $18,600 for an SF apartment that didn't exist. We built the agent that would have stopped it."
