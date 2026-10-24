@@ -8,6 +8,7 @@ import { ListingCard } from "./ui/ListingCard";
 import { Stats, type StatValues } from "./ui/Stats";
 import { Moment, type MomentData } from "./ui/Moment";
 import { Inbox } from "./ui/Inbox";
+import { Mission } from "./ui/Mission";
 import type { Criteria, RankedListing } from "@/lib/types";
 import type { Approval, ChatMsg, Thread, TimelineItem } from "@/lib/store";
 
@@ -240,6 +241,8 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
         <button className="ghost" onClick={() => void reset()}>Reset</button>
       </header>
 
+      <Mission criteria={s?.criteria} scanned={stats.scanned} shown={s?.results.length ?? 0} flagged={s?.flagged.length ?? 0} threads={threads}
+        booked={(s?.events.length ?? 0) > 0 || threads.some((t) => t.status === "booked")} searching={searching} />
       <main className="grid" data-m={mobile}>
         <section className="col col-chat">
           <div className="panel chat">
