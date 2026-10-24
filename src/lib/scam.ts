@@ -104,5 +104,5 @@ export function scoreScam(l: Listing, ctx: ScamContext): ScamResult {
 
   const core = reasons.filter((r) => !r.startsWith("info:"));
   if (!core.length) reasons.unshift("no scam signals found (price in market range, no risky payment keywords, no duplicates)");
-  return { light: lightFor(score), score, reasons };
+  return { light: lightFor(score), score: Math.min(100, score), reasons };
 }
