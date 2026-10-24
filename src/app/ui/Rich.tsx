@@ -8,6 +8,8 @@ function inline(text: string, key: string): ReactNode[] {
     : p);
 }
 
+const ICON = new RegExp("^(\\p{Extended_Pictographic}\\uFE0F?)\\s*(.+)$", "u");
+
 /** Light formatting for agent replies: paragraphs, numbered and bulleted lists. */
 export function Rich({ text }: { text: string }) {
   const out: ReactNode[] = [];
@@ -29,7 +31,12 @@ export function Rich({ text }: { text: string }) {
       continue;
     }
     flush();
-    if (line) out.push(<p key={out.length}>{inline(line, `p${out.length}`)}</p>);
+    if (!line) continue;
+    // A leading emoji (🚩, 💬, 📅…) is an icon: give it its own slot so the text after it lines up.
+    const ico = line.match(ICON);
+    out.push(ico
+      ? <p key={out.length} className="rich-ico"><span aria-hidden="true">{ico[1]}</span><span>{inline(ico[2], `p${out.length}`)}</span></p>
+      : <p key={out.length}>{inline(line, `p${out.length}`)}</p>);
   }
   flush();
   return <div className="rich">{out}</div>;

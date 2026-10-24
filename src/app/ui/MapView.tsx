@@ -5,6 +5,9 @@ import "leaflet/dist/leaflet.css";
 import { hoodCoords } from "@/lib/geo";
 import type { RankedListing } from "@/lib/types";
 
+const VERDICT = { green: "Looks safe", yellow: "Caution", red: "Likely scam" } as const;
+const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+
 /** Small deterministic offset so listings sharing a neighborhood centroid don't stack. */
 function jitter(id: string): [number, number] {
   let h = 0; for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) | 0;
@@ -51,7 +54,7 @@ export default function MapView({ listings, near, hovered }: { listings: RankedL
       pts.push(c);
       const price = l.priceMonthly ? `$${(l.priceMonthly / 1000).toFixed(1)}k` : "?";
       const m = L.marker(c, { icon: L.divIcon({ className: "", html: `<div class="mk ${l.scam.light}">${l.scam.light === "red" ? "⚠ " : ""}${price}</div>`, iconSize: [0, 0] }), zIndexOffset: l.scam.light === "red" ? 0 : 100 })
-        .bindPopup(`<div class="mk-pop"><b>${l.title.replace(/</g, "&lt;")}</b><span>$${l.priceMonthly?.toLocaleString("en-US") ?? "?"}/mo, scam risk ${l.scam.score}/100</span><a href="${l.url}" target="_blank" rel="noreferrer">Open listing</a></div>`)
+        .bindPopup(`<div class="mk-pop ${l.scam.light}"><b>${esc(l.title.replace(/^\[DEMO DATA\]\s*/i, "").replace(/[\s\-–—]+$/, ""))}</b><span><strong>$${l.priceMonthly?.toLocaleString("en-US") ?? "?"}</strong>/mo · <em>${VERDICT[l.scam.light]}</em> · risk ${l.scam.score}/100</span><a href="${esc(l.url)}" target="_blank" rel="noreferrer">Open listing</a></div>`, { closeButton: false, offset: [0, -10] })
         .addTo(layer.current);
       markers.current.set(l.id, m);
     }
