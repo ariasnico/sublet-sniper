@@ -491,7 +491,7 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
 
         <section className="col col-inbox">
           <div className="panel side">
-            <div className="ph"><div><h2>Deals in progress</h2><small>Each landlord your agent is talking to, as you</small></div>
+            <div className="ph"><div><h2>Your agent at work</h2><small className="side-sub">Your agent emails landlords as you, negotiates and books. You don&apos;t need to do anything here unless it asks.</small></div>
               <span className="grow" />
               {savedPerMonth > 0 && <span className="saved-pill" title="Negotiated off the asking rent">Saving you ${savedPerMonth.toLocaleString("en-US")}/mo</span>}
               {needCount > 0 && <span className="badge" title="Needs you">{needCount}</span>}</div>
@@ -504,7 +504,7 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
               {!events.length && needCards.filter((_, i) => needs[i].kind !== "craigslist_replies")}
               {events.map((e) => {
                 const d = new Date(e.start);
-                return <div key={e.id} className="ticket-card">
+                return <div key={e.id} className="ticket-card hero">
                   <div className="cal sm" aria-hidden="true"><span>{d.toLocaleString("en-US", { timeZone: LA, month: "short" })}</span><b>{d.toLocaleString("en-US", { timeZone: LA, day: "numeric" })}</b></div>
                   <div className="tk-body"><div className="tk"><i aria-hidden="true">✓</i>Viewing booked</div><div className="tw">{fmtLong(e.start)}</div><div className="tt">{clean(e.title)}</div>
                     <div className="tn">Pay nothing before you see it.</div>
@@ -513,7 +513,7 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
                 </div>;
               })}
               {events.length > 0 && needCards.filter((_, i) => needs[i].kind !== "craigslist_replies")}
-              <Inbox threads={threads} listings={mapListings} />
+              <Inbox threads={threads} listings={mapListings} events={events} />
               {needCards.filter((_, i) => needs[i].kind === "craigslist_replies")}
               {dealsEmpty && <div className="empty deals-empty">
                 <svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true"><path d="M4 6.5h16v11H4z M4 7l8 6 8-6" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" /></svg>
@@ -556,25 +556,40 @@ function NeedCard({ n, listingOf, onApprove, onPaste }: { n: Need; listingOf: (a
   const listing = n.approvalId ? listingOf(n.approvalId) : undefined;
   const id = n.approvalId;
   const choices = (opts: string[]) => opts.map((o, i) => <button key={o} className={i === 0 ? "primary sm" : "ghost sm"} onClick={() => id && onApprove(id, true, o)}>{o}</button>);
+  const [open, setOpen] = useState(false);
+  // Craigslist hand-offs are optional extra reach, never the job: one quiet collapsed row at the bottom.
+  if (n.kind === "craigslist_replies") {
+    const items = n.items ?? [];
+    return (
+      <div className={`cl-opt${open ? " open" : ""}`}>
+        <div className="cl-row">
+          <span className="cl-k">Optional</span>
+          <p><b>{items.length} more Craigslist listing{items.length === 1 ? "" : "s"}.</b> Craigslist only lets a human click Reply; the messages are written.</p>
+          <button className="ghost xs" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? "Hide" : "Open drafts"}</button>
+        </div>
+        {open && <ul className="cl-items">
+          {items.map((d) => { const l = listingOf(d.approvalId, d.listingId); return (
+            <li key={d.approvalId}>
+              <div className="cl-t">{l ? short(l.title, 60) : "Craigslist listing"}{l?.priceMonthly ? <span>${l.priceMonthly.toLocaleString("en-US")}/mo</span> : null}</div>
+              <Draft text={d.message} hidden />
+              <div className="ap-actions"><button className="primary sm" onClick={() => onPaste(d)}>Open listing & paste</button><button className="ghost sm" onClick={() => onApprove(d.approvalId, false)}>Skip this one</button></div>
+            </li>); })}
+        </ul>}
+      </div>
+    );
+  }
   return (
     <div className={`ap need k-${n.kind}`}>
       <div className="ap-who"><span className="avatar sm"><Bot size={16} /></span>Your agent needs you{listing && <em>{short(listing.title, 44)}</em>}</div>
       <div className="ap-t">{c.title}</div>
       {c.body && <p className="ap-b">{c.body}</p>}
       {c.draft && <Draft text={c.draft} />}
-      {n.kind === "craigslist_replies" ? <ul className="cl-items">
-        {(n.items ?? []).map((d) => { const l = listingOf(d.approvalId, d.listingId); return (
-          <li key={d.approvalId}>
-            <div className="cl-t">{l ? short(l.title, 60) : "Craigslist listing"}{l?.priceMonthly ? <span>${l.priceMonthly.toLocaleString("en-US")}/mo</span> : null}</div>
-            <Draft text={d.message} hidden />
-            <div className="ap-actions"><button className="primary sm" onClick={() => onPaste(d)}>Open listing & paste</button><button className="ghost sm" onClick={() => onApprove(d.approvalId, false)}>Skip this one</button></div>
-          </li>); })}
-      </ul> : <div className="ap-actions">
+      <div className="ap-actions">
         {n.kind === "autopilot_consent" ? choices(n.options?.length ? n.options : CONSENT)
           : n.kind === "decision" ? choices(n.options?.length ? n.options : ["Yes", "No"])
           : <><button className="primary sm" onClick={() => id && onApprove(id, true)}>{n.kind === "approve_send" ? "Approve & send" : n.kind === "confirm_booking" ? "Book it" : "Approve"}</button>
             <button className="ghost sm" onClick={() => id && onApprove(id, false)}>Not now</button></>}
-      </div>}
+      </div>
     </div>
   );
 }

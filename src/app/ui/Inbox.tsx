@@ -83,10 +83,34 @@ function Bubble({ x, last, onTyped }: { x: Thread["messages"][number]; last: boo
 
 const usd = (n: number) => `$${n.toLocaleString("en-US")}`;
 
-function ThreadCard({ t, listing }: { t: Thread; listing?: RankedListing }) {
+type Ev = { title: string; start: string };
+const cleanTitle = (s: string) => s.replace(/^Viewing: /, "").replace(/^\[DEMO DATA\]\s*/, "").trim();
+const when = (iso: string) => new Date(iso).toLocaleString("en-US", { timeZone: "America/Los_Angeles", weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+
+/** One plain-English line: what your agent did, and what happens next. You should never need to read the emails. */
+function headline(t: Thread, d: ReturnType<typeof deal>, replying: boolean, ev?: Ev): { tone: "ok" | "busy" | "guard" | "wait"; text: string } {
+  if (t.status === "booked") return { tone: "ok", text: ev ? `Viewing booked ${when(ev.start)}. You just show up.` : "Viewing booked. You just show up." };
+  if (replying) return { tone: "busy", text: "The landlord just replied. Your agent is answering…" };
+  const agreed = t.deal?.agreed;
+  if (agreed) return { tone: "busy", text: `Landlord agreed to ${usd(agreed)}/mo. Booking the viewing…` };
+  if (t.status === "viewing_proposed") return { tone: "wait", text: "Offered viewing times. Waiting for the landlord to pick one." };
+  const flagged = t.messages.filter((m) => m.flagged);
+  if (flagged.length) {
+    const via = flagged.map((m) => m.text).join(" ").match(/zelle|wire|venmo|cash ?app|gift ?card|bitcoin|crypto|western union/i)?.[0];
+    return { tone: "guard", text: `Refused to pay${via ? ` by ${via[0].toUpperCase()}${via.slice(1).toLowerCase()}` : ""} before a viewing${d?.offered ? ` and countered ${usd(d.offered)}` : ""}. Waiting for the landlord.` };
+  }
+  if (d?.offered) return { tone: "wait", text: `Countered ${usd(d.offered)} (they asked ${usd(d.asked)}). Waiting for the landlord.` };
+  if (t.status === "active") return { tone: "wait", text: "Asked for a live video tour and proof of the lease. Waiting for the landlord." };
+  return { tone: "wait", text: "Emailed the landlord as you. Waiting for a reply." };
+}
+
+function ThreadCard({ t, listing, ev }: { t: Thread; listing?: RankedListing; ev?: Ev }) {
+  // The emails are the receipts, not the job: collapsed by default. Anything that arrives while you watch peeks in.
+  const [open, setOpen] = useState(false);
   const [all, setAll] = useState(false);
-  const msgs = all ? t.messages : t.messages.slice(-3);
   const last = t.messages[t.messages.length - 1];
+  const peek = t.messages.slice(-2).filter((m) => !!PAGE_LOAD && m.at > PAGE_LOAD);
+  const msgs = open ? (all ? t.messages : t.messages.slice(-3)) : peek;
   // The landlord just wrote and the agent hasn't answered yet: show it working.
   const replying = last?.from === "landlord" && !last.flagged && t.status !== "booked" && Date.now() - new Date(last.at).getTime() < 3 * 60e3;
   const card = useRef<HTMLDivElement>(null);
@@ -108,12 +132,14 @@ function ThreadCard({ t, listing }: { t: Thread; listing?: RankedListing }) {
   }, [last?.at, reveal]);
   const d = deal(t, listing);
   const save = d?.offered ? d.asked - d.offered : 0;
+  const now = headline(t, d, replying, ev);
   return (
     <div ref={card} className={`th st-${t.status}${pulse ? " pulse" : ""}`}>
       <div className="th-head">
         <div className="th-title">{t.listingTitle.replace(/^\[DEMO DATA\]\s*/, "")}</div>
         <span key={t.status} className={`st st-${t.status}`}>{STATUS[t.status] ?? t.status}</span>
       </div>
+      <p key={now.text} className={`th-now ${now.tone}`} aria-live="polite"><i aria-hidden="true" />{now.text}</p>
       <div className="th-k">Safety checks</div>
       <ul className="proto" aria-label="Safety checks">
         {/* Keyed by position so a chip keeps its node and cross-fades when its state flips; the dot remounts to replay its tick. */}
@@ -127,15 +153,21 @@ function ThreadCard({ t, listing }: { t: Thread; listing?: RankedListing }) {
         {/* Always rendered so the bar never reflows when the saving lands. */}
         <div className={save > 0 ? "save" : "save pending"}><span>You save</span><b key={save}>{save > 0 ? `${usd(save)}/mo` : "…"}</b></div>
       </div>}
-      {t.messages.length > 3 && <button className="th-more" onClick={() => setAll(!all)}>{all ? "Show latest only" : `Show ${t.messages.length - 3} earlier`}</button>}
-      <div className="th-msgs">
+      {(msgs.length > 0 || replying) && <div className="th-msgs">
         {msgs.map((x, i) => <Bubble key={x.id ?? `${x.at}-${i}`} x={x} last={i === msgs.length - 1} onTyped={i === msgs.length - 1 ? reveal : undefined} />)}
         {replying && <div className="bub ag replying"><div className="bub-who">Your agent, as you</div><div className="typing"><i /><i /><i /></div><span className="replying-t">Reading the reply and checking your calendar</span></div>}
+      </div>}
+      <div className="th-foot">
+        <button className="th-more" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? "Hide the emails" : `See the emails (${t.messages.length})`}</button>
+        {open && t.messages.length > 3 && <button className="th-more" onClick={() => setAll(!all)}>{all ? "Latest only" : `${t.messages.length - 3} earlier`}</button>}
       </div>
     </div>
   );
 }
 
-export function Inbox({ threads, listings = [] }: { threads: Thread[]; listings?: RankedListing[] }) {
-  return <>{threads.map((t) => <ThreadCard key={t.id} t={t} listing={listings.find((l) => l.id === t.listingId)} />)}</>;
+export function Inbox({ threads, listings = [], events = [] }: { threads: Thread[]; listings?: RankedListing[]; events?: Ev[] }) {
+  return <>{threads.map((t) => {
+    const title = cleanTitle(t.listingTitle);
+    return <ThreadCard key={t.id} t={t} listing={listings.find((l) => l.id === t.listingId)} ev={events.find((e) => cleanTitle(e.title) === title)} />;
+  })}</>;
 }
