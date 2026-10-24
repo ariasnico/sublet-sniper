@@ -89,8 +89,7 @@ export function ListingCard({ l, i, onContact, pinned, onHover, onXray }: { l: R
             {l.scam.light !== "green" && <RiskRing score={l.scam.score} light={l.scam.light} />}
           </div>
           <div className="lc-price"><b>${l.priceMonthly?.toLocaleString("en-US") ?? "?"}</b><span>/mo</span>
-            <em className={`risk-label ${l.scam.light}`}>{l.scam.light === "green" && <i aria-hidden="true" />}{LABEL[l.scam.light]}</em>
-            {l.demo && <em className="demo">Demo</em>}</div>
+            <em className={`risk-label ${l.scam.light}`}>{l.scam.light === "green" && <i aria-hidden="true" />}{LABEL[l.scam.light]}</em></div>
         </div>
       </div>
       {!onXray && l.scam.light !== "green" && l.scam.reasons.length > 0 && <>

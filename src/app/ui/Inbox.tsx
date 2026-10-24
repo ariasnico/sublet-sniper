@@ -3,8 +3,8 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type { CallRecord, Thread } from "@/lib/store";
 import type { RankedListing } from "@/lib/types";
 
-const STATUS: Record<Thread["status"], string> = { awaiting_landlord: "Emailed, waiting", active: "Talking", viewing_proposed: "Slots offered", booked: "Viewing booked", flagged: "Scam refused" };
-const ago = (iso: string) => {
+export const STATUS: Record<Thread["status"], string> = { awaiting_landlord: "Emailed, waiting", active: "Talking", viewing_proposed: "Slots offered", booked: "Viewing booked", flagged: "Scam refused" };
+export const ago = (iso: string) => {
   const m = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
   return m < 1 ? "now" : m < 60 ? `${m}m` : m < 1440 ? `${Math.round(m / 60)}h` : `${Math.round(m / 1440)}d`;
 };
@@ -13,7 +13,7 @@ const PAGE_LOAD = typeof window === "undefined" ? "" : new Date().toISOString();
 const reduced = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 type Check = { k: string; state: "ok" | "wait" | "blocked" | "resolved" };
-function protocol(t: Thread, l?: RankedListing): Check[] {
+export function protocol(t: Thread, l?: RankedListing): Check[] {
   const landlord = t.messages.filter((m) => m.from === "landlord").map((m) => m.text).join("\n");
   const flagged = t.messages.some((m) => m.flagged);
   // The landlord asked for money, we refused, and they still agreed / booked: handled, not passed and not a live threat.
@@ -90,7 +90,7 @@ const usd = (n: number) => `$${n.toLocaleString("en-US")}`;
 
 
 /** One plain-English line: what your agent did, and what happens next. You should never need to read the emails. */
-function headline(t: Thread, d: ReturnType<typeof deal>, replying: boolean): { tone: "ok" | "busy" | "guard" | "wait"; text: string } {
+export function headline(t: Thread, d: ReturnType<typeof deal>, replying: boolean): { tone: "ok" | "busy" | "guard" | "wait"; text: string } {
   // Prices live in the deal bar below: the line only says what happened.
   if (t.status === "booked") return { tone: "ok", text: "Viewing booked." };
   if (replying) return { tone: "busy", text: "Landlord replied. Answering…" };
@@ -107,14 +107,14 @@ function headline(t: Thread, d: ReturnType<typeof deal>, replying: boolean): { t
 }
 
 /** Phone call state on a deal: a live pulsing line while calling, then the transcript behind one toggle. */
-function CallBox({ c }: { c: CallRecord }) {
+export function CallBox({ c, open = false }: { c: CallRecord; open?: boolean }) {
   if (c.status === "calling") {
     const line = c.transcript[c.transcript.length - 1];
     return <div className="call-live" aria-live="polite"><i aria-hidden="true" /><b>📞 Calling…</b>{line && <span key={line.id}>{line.from === "agent" ? "Agent" : "Landlord"}: {line.text}</span>}</div>;
   }
   if (c.status !== "done") return <div className="call-end">📞 {c.status === "no_answer" ? "No answer" : "Call failed"}</div>;
   return (
-    <details className="call-tx">
+    <details className="call-tx" open={open}>
       <summary>Call transcript</summary>
       <ol>{c.transcript.map((m, i) => <li key={m.id ?? i} className={m.from === "agent" ? "ag" : "ll"}><b>{m.from === "agent" ? "Agent" : "Landlord"}</b><span>{m.text}{m.flagged && <em> Refused</em>}</span></li>)}</ol>
     </details>
@@ -123,14 +123,14 @@ function CallBox({ c }: { c: CallRecord }) {
 
 interface CallProps { call?: CallRecord; canCall?: boolean; onCall?: (threadId: string) => void; onBrowser?: (threadId: string) => void; onEnd?: () => void; browserLive?: boolean }
 
-function ThreadCard({ t, listing, call, canCall, onCall, onBrowser, onEnd, browserLive }: { t: Thread; listing?: RankedListing } & CallProps) {
-  // The emails are the receipts, not the job: collapsed by default. Anything that arrives while you watch peeks in.
-  const [open, setOpen] = useState(false);
+export function ThreadCard({ t, listing, call, canCall, onCall, onBrowser, onEnd, browserLive, expanded = false }: { t: Thread; listing?: RankedListing; expanded?: boolean } & CallProps) {
+  // The emails are the receipts, not the job: collapsed by default (open in the Activity drawer). Anything that arrives while you watch peeks in.
+  const [open, setOpen] = useState(expanded);
   const [all, setAll] = useState(false);
   const mail = t.messages.filter((m) => m.channel !== "call");
   const last = mail[mail.length - 1];
   const peek = mail.slice(-1).filter((m) => !!PAGE_LOAD && m.at > PAGE_LOAD);
-  const [checksOpen, setChecksOpen] = useState(false);
+  const [checksOpen, setChecksOpen] = useState(expanded);
   const msgs = open ? (all ? mail : mail.slice(-3)) : peek;
   // The landlord just wrote and the agent hasn't answered yet: show it working.
   const replying = last?.from === "landlord" && !last.flagged && t.status !== "booked" && Date.now() - new Date(last.at).getTime() < 3 * 60e3;
@@ -166,7 +166,7 @@ function ThreadCard({ t, listing, call, canCall, onCall, onBrowser, onEnd, brows
           onClick={() => setChecksOpen(!checksOpen)}><i aria-hidden="true">{blockedN ? "!" : "✓"}</i>{booked ? `Booked · ${okN}/${checks.length}` : `${okN}/${checks.length} checks`}</button>
       </div>
       <p key={now.text} className={`th-now ${now.tone}`} aria-live="polite"><i aria-hidden="true" />{now.text}</p>
-      {call && <CallBox c={call} />}
+      {call && <CallBox c={call} open={expanded} />}
       {checksOpen && <ul className="proto" aria-label="Safety checks">
         {/* Keyed by position so a chip keeps its node and cross-fades when its state flips; the dot remounts to replay its tick. */}
         {checks.map((c, i) => <li key={i} className={c.state} style={{ "--i": i } as CSSProperties}>

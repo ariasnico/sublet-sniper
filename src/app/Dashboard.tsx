@@ -9,8 +9,10 @@ import { ListingCard } from "./ui/ListingCard";
 import { Moment, type MomentData } from "./ui/Moment";
 import { CallStage } from "./ui/CallStage";
 import type { LiveCall } from "@/lib/voice";
-import { Inbox, deal } from "./ui/Inbox";
-import { Mission } from "./ui/Mission";
+import { deal } from "./ui/Inbox";
+import { StatusBar, type StatusInput } from "./ui/Mission";
+import { Activity, callOf, lastAt } from "./ui/Activity";
+import { BookedHero, MatchHero, MatchRow, WorkHero } from "./ui/Hero";
 import type { AutopilotView, CraigslistDraft, NeedsYouItem } from "@/lib/autopilot";
 import { XRay } from "./ui/XRay";
 import { ChatThread } from "./ui/chat/ChatThread";
@@ -48,7 +50,6 @@ interface SR { lang: string; interimResults: boolean; continuous?: boolean; onre
 type SRCtor = new () => SR;
 
 const LA = "America/Los_Angeles";
-const fmt = (iso: string) => new Date(iso).toLocaleString("en-US", { timeZone: LA, weekday: "short", hour: "numeric", minute: "2-digit" }) + " PT";
 const fmtLong = (iso: string) => new Date(iso).toLocaleString("en-US", { timeZone: LA, weekday: "long", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) + " PT";
 const clean = (t: string) => t.replace(/^Viewing: /, "").replace(/^\[DEMO DATA\]\s*/, "");
 const short = (t: string, n = 38) => { const c = clean(t); return c.length > n ? `${c.slice(0, n - 1).trimEnd()}…` : c; };
@@ -97,52 +98,70 @@ function Scanning() {
   );
 }
 
-function FirstRun() {
-  return (
-    <div className="first">
-      <div className="first-bot"><Bot size={104} /></div>
-      <h3>No places yet</h3>
-    </div>
-  );
+const usd = (n: number) => `$${n.toLocaleString("en-US")}`;
+type Status = Pick<StatusInput, "label" | "detail" | "tone">;
+/** The status bar's one headline ("Negotiating · offered $3,600 (asked $3,800)"), read from the state itself. */
+function deriveStatus(s: S | null, threads: Thread[], pending: Approval[], calling: boolean, autopilot: boolean): Status {
+  if (!s) return { label: "Getting ready", tone: "wait" };
+  if (calling) return { label: "On the phone", detail: "negotiating for you", tone: "live" };
+  const ordered = [...threads].sort((a, b) => (b.messages.at(-1)?.at ?? "").localeCompare(a.messages.at(-1)?.at ?? ""));
+  const booked = ordered.find((x) => x.status === "booked");
+  if (booked || s.events.length) {
+    // The ticket below carries the date; the bar only says the job is done.
+    return { label: "Booked", tone: "ok" };
+  }
+  const p = pending.find((x) => kindOf(x) !== "open_craigslist_reply");
+  if (p) {
+    const k = kindOf(p);
+    return { label: "Waiting for your OK", detail: k === "send_contact" ? "to email" : k === "book_viewing" ? "to book" : undefined, tone: "wait" };
+  }
+  const t = ordered[0];
+  if (t) {
+    const d = deal(t);
+    if (t.deal?.agreed) return { label: "Booking", detail: `agreed ${usd(t.deal.agreed)}`, tone: "live" };
+    if (d?.offered) return { label: "Negotiating", detail: `offered ${usd(d.offered)} (asked ${usd(d.asked)})`, tone: "live" };
+    if (t.status === "flagged") return { label: "Guarding", detail: "refused money before a viewing", tone: "guard" };
+    if (t.status === "viewing_proposed") return { label: "Scheduling", detail: "sent viewing times", tone: "live" };
+    if (t.messages.at(-1)?.from === "landlord") return { label: "Negotiating", detail: "reading the reply", tone: "live" };
+    if (t.status === "active") return { label: "Negotiating", detail: "asked for a video tour", tone: "live" };
+    return { label: "Contacting", detail: "emailed the landlord", tone: "wait" };
+  }
+  if (s.results.length) return { label: "Matches ready", detail: autopilot ? "contacting the best one" : "pick one", tone: "wait" };
+  if (s.searchReport || s.flagged.length) return { label: "No safe matches", detail: "try a bigger budget", tone: "guard" };
+  return { label: "Waiting for your request", tone: "wait" };
 }
 
-/** What the agent is doing right now and what it will do next, read from the state itself (used until the backend reports it). */
-function deriveNowNext(s: S | null, threads: Thread[], pending: Approval[], busy: boolean, autopilot: boolean): { now: string; next: string } {
-  // Both lines stay at 8 words or fewer; counts live in the mission stats.
-  if (!s) return { now: "Getting ready", next: "Tell me what you need" };
-  const safe = s.results.length, scams = s.flagged.length;
-  const afterSearch = safe ? (autopilot ? "Email the best landlord" : "Pick a place to contact") : "Try a bigger budget";
-  const base = ((): { now: string; next: string } => {
-    const p = pending[0];
-    if (p) {
-      const k = kindOf(p);
-      if (k === "autopilot_consent") return { now: "Waiting for your OK", next: "Email the best landlord" };
-      if (k === "open_craigslist_reply") return { now: "Waiting for your Craigslist reply", next: "Negotiate when they answer" };
-      if (k === "send_contact") return { now: "Waiting for your OK to email", next: "Ask for a video tour" };
-      if (k === "book_viewing") return { now: "Waiting for your OK to book", next: "Add it to your calendar" };
-      return { now: "Waiting for your answer", next: "Keep the deal moving" };
-    }
-    const ordered = [...threads].sort((a, b) => (b.messages.at(-1)?.at ?? "").localeCompare(a.messages.at(-1)?.at ?? ""));
-    const t = ordered.find((x) => x.status === "booked") ?? ordered[0];
-    if (t) {
-      const last = t.messages.at(-1);
-      if (t.status === "booked") {
-        const ev = s.events.find((e) => e.title.includes(t.listingTitle)) ?? s.events[0];
-        return { now: ev ? `Viewing booked: ${fmt(ev.start)}` : "Viewing booked", next: "Pay nothing before you see it" };
-      }
-      if (t.status === "flagged") return { now: "Refused money before a viewing", next: safe > 1 ? "Try the next safe listing" : "Search again" };
-      if (t.status === "viewing_proposed") return { now: "Sent viewing times", next: "Book the one they pick" };
-      if (last?.from === "landlord") return { now: "Reading the reply", next: "Counter and ask for a viewing" };
-      if (t.status === "active") {
-        const d = deal(t);
-        return { now: d?.offered ? `Countered $${d.offered.toLocaleString("en-US")}, waiting` : "Talking with the landlord", next: "Book the first free slot" };
-      }
-      return { now: "Emailed the landlord, waiting", next: "Negotiate when they reply" };
-    }
-    if (s.searchReport || safe || scams) return { now: `${safe} safe place${safe === 1 ? "" : "s"} ranked`, next: afterSearch };
-    return { now: "Waiting for your request", next: "Search and score every listing" };
-  })();
-  return busy ? { now: "Thinking…", next: base.next } : base;
+/** Header account menu: who you are, system status, Check mail, Reset, sign out. */
+function Account({ user, modes, onCheck, onReset }: { user: { email: string | null; guest: boolean } | null; modes?: Modes; onCheck: () => void; onReset: () => void }) {
+  const [open, setOpen] = useState(false);
+  const wrap = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    const off = (e: PointerEvent) => { if (!wrap.current?.contains(e.target as Node)) setOpen(false); };
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("pointerdown", off); document.addEventListener("keydown", esc);
+    return () => { document.removeEventListener("pointerdown", off); document.removeEventListener("keydown", esc); };
+  }, [open]);
+  const m = modes;
+  const live = m ? [m.llm !== "mock" && "OpenAI", m.craigslist === "live" && "Craigslist", m.mail !== "mock" && "AgentMail", m.calendar !== "mock" && "Calendar"].filter(Boolean) as string[] : [];
+  const name = user ? (user.guest ? "Guest" : user.email ?? "Account") : "Local session";
+  return <div className="acct" ref={wrap}>
+    <button type="button" className="acct-btn" aria-haspopup="menu" aria-expanded={open} aria-label={`Account: ${name}`} onClick={() => setOpen((x) => !x)}>
+      {name[0]?.toUpperCase() ?? "?"}<i className={live.length ? "on" : ""} aria-hidden="true" /></button>
+    {open && <div className="acct-pop" role="menu">
+      <div className="acct-who" title={name}>{name}</div>
+      {m && <details className="acct-sys">
+        <summary>{live.length ? `${live.length} live: ${live.join(", ")}` : "Running on mock backends"}</summary>
+        {([["LLM", m.llm, m.llm !== "mock"], ["Craigslist", m.craigslist, m.craigslist === "live"], ["Mail", m.mail, m.mail !== "mock"], ["Calendar", m.calendar, m.calendar !== "mock"], ["Voice", m.voice, true]] as [string, string, boolean][])
+          .map(([k, v, on]) => <div key={k}><i className={on ? "on" : ""} />{k}<b>{v}</b></div>)}
+        {m.agentInbox && <div className="acct-inbox">Agent inbox: {m.agentInbox}</div>}
+      </details>}
+      <button type="button" role="menuitem" onClick={() => { onCheck(); setOpen(false); }}>Check mail</button>
+      <button type="button" role="menuitem" onClick={() => { onReset(); setOpen(false); }}>Reset</button>
+      <Link role="menuitem" className="acct-link" href="/#agents">Use from your AI agent</Link>
+      {user && <form action="/auth/signout" method="post"><button type="submit" role="menuitem">Sign out</button></form>}
+    </div>}
+  </div>;
 }
 
 export default function Dashboard({ elevenLabsAgentId, user = null }: { elevenLabsAgentId: string | null; user?: { id: string; email: string | null; guest: boolean } | null }) {
@@ -157,7 +176,10 @@ export default function Dashboard({ elevenLabsAgentId, user = null }: { elevenLa
   const [lang, setLang] = useState("en-US");
   const [tab, setTab] = useState<"ranked" | "flagged">("ranked");
   const [view, setView] = useState<"list" | "map">("list");
-  const [mobile, setMobile] = useState<"chat" | "homes" | "inbox">("chat");
+  const [mobile, setMobile] = useState<"home" | "places" | "activity">("home");
+  const [pane, setPane] = useState<"home" | "activity">("home");
+  const [openThread, setOpenThread] = useState<string | null>(null);
+  const [showAll, setShowAll] = useState(false);
   const [hovered, setHovered] = useState<string | null>(null);
   const [moment, setMoment] = useState<MomentData | null>(null);
   const [xray, setXray] = useState<string | null>(null);
@@ -262,7 +284,7 @@ export default function Dashboard({ elevenLabsAgentId, user = null }: { elevenLa
       toast.warning("Your agent needs you", { description: needCopy(n).title });
     }
     // On a phone, jump straight to the card that needs a tap.
-    if (fresh && window.matchMedia("(max-width: 1000px)").matches) setMobile("inbox");
+    if (fresh && window.matchMedia("(max-width: 1000px)").matches) setMobile("home");
   }, [s, needs]);
 
   // A pasted link that scores risky opens its X-ray right away.
@@ -272,7 +294,7 @@ export default function Dashboard({ elevenLabsAgentId, user = null }: { elevenLa
     const id = s.analyzedId ?? null;
     if (lastAnalyzed.current !== undefined && id && id !== lastAnalyzed.current) {
       const l = [...s.results, ...s.flagged].find((x) => x.id === id);
-      if (l && l.scam.light !== "green") { setXray(id); setTab(l.scam.light === "red" ? "flagged" : "ranked"); setView("list"); }
+      if (l && l.scam.light !== "green") { setXray(id); setTab(l.scam.light === "red" ? "flagged" : "ranked"); setView("list"); setShowAll(true); setPane("home"); }
     }
     lastAnalyzed.current = id;
   }, [s]);
@@ -296,7 +318,7 @@ export default function Dashboard({ elevenLabsAgentId, user = null }: { elevenLa
       if (t.kind === "email_out") toast.success("Email sent", { description: t.text });
       else if (t.kind === "call") toast(t.text);
       else if (t.kind === "email_in") toast("Landlord replied", { description: t.text });
-      else if (t.kind === "search") toast.success("Search done", { description: t.text });
+      // No "search done" toast: the hero and its counts already say it.
     }
   }, [s]);
   const scrolledOnce = useRef(false);
@@ -315,7 +337,7 @@ export default function Dashboard({ elevenLabsAgentId, user = null }: { elevenLa
     if (!text.trim()) return;
     sentAt.current = new Date().toISOString(); setBusy(true); setInput("");
     const isSearch = /busc|search|looking|find|encontr|1br|studio|room|depto|amobl|furnish|\$\d/i.test(text) && !/https?:\/\//.test(text);
-    if (isSearch) { setSearching(true); setMobile("homes"); setTab("ranked"); }
+    if (isSearch) { setSearching(true); setMobile("home"); setTab("ranked"); }
     const t0 = Date.now();
     try { const r = await call<{ reply: string }>("/api/agent", { text }); if (r.reply) say(r.reply); }
     catch { toast.error("The agent took too long", { description: "Try again in a moment." }); }
@@ -350,7 +372,7 @@ export default function Dashboard({ elevenLabsAgentId, user = null }: { elevenLa
     if (r.error === "bad body") r = await call<{ openUrl?: string; error?: string }>("/api/approve", { id, approve: ok, answer });
     if (r.openUrl && !opened) window.open(r.openUrl, "_blank", "noopener");
     if (r.error) toast.error("Couldn't do that", { description: r.error });
-    if (ok && approval?.kind === "send_contact") setMobile("inbox");
+    if (ok && approval?.kind === "send_contact") setMobile("home");
     void refresh();
   };
   // The one human step: copy the drafted message, open the real listing (in the click, so popup blockers allow it), mark it taken.
@@ -390,14 +412,14 @@ export default function Dashboard({ elevenLabsAgentId, user = null }: { elevenLa
     setStageId(null); staged.current = false;
     const m = heldMoment.current; heldMoment.current = null;
     if (m) { lastMoment.current = Date.now(); setMoment(m); }
-    if (window.matchMedia("(max-width: 1000px)").matches) setMobile("inbox");
+    if (window.matchMedia("(max-width: 1000px)").matches) setMobile("home");
   }, []);
   useEffect(() => {
     if (!calling) return;
     const id = setInterval(() => { void call("/api/voice/status"); }, 1500);
     return () => clearInterval(id);
   }, [calling, call]);
-  const contact = async (id: string) => { setMobile("chat"); await send(`Contact listing ${id}`).catch(() => undefined); };
+  const contact = async (id: string) => { setMobile("home"); await send(`Contact listing ${id}`).catch(() => undefined); };
   const landlord = async (preset: string) => { const r = await post<{ error?: string }>("/api/demo/landlord", { preset }); if (r.error) toast.error(r.error); void refresh(); };
   const reset = async () => { const at = new Date().toISOString(); try { localStorage.setItem(RESET_KEY, at); } catch { /* private mode */ } setResetAt(at); await post("/api/reset"); best.current = null; seen.current = null; seenNeeds.current = null; setView("list"); void refresh(); toast("Fresh start", { description: "Session cleared." }); };
 
@@ -429,13 +451,10 @@ export default function Dashboard({ elevenLabsAgentId, user = null }: { elevenLa
     const minutes = scanned * 0.5 + emails * 12 + blocked * 20 + booked * 25;
     return { blocked, minutes };
   }, [scanned, s?.flagged, s?.events, threads]);
-  const derived = deriveNowNext(s, threads, pending, busy && !searching, apOn);
-  // The backend narrates Now/Next while autopilot runs; with autopilot paused, the per-step view is more useful.
+  // The backend reports the autopilot stage; it lights the matching step dot.
   const ap = s?.autopilot;
-  const fromBackend = !!ap?.now && !busy && ap.stage !== "paused";
-  const nowNext = fromBackend ? { now: ap!.now!, next: ap!.next || derived.next } : derived;
-  const stage = fromBackend && ap?.stage ? STAGE_STEP[ap.stage] : undefined;
-  const liveModes = m ? [m.llm !== "mock" && "OpenAI", m.craigslist === "live" && "Craigslist", m.mail !== "mock" && "AgentMail", m.calendar !== "mock" && "Calendar"].filter(Boolean) as string[] : [];
+  const stage = ap?.stage && !busy && ap.stage !== "paused" ? STAGE_STEP[ap.stage] : undefined;
+  const status = deriveStatus(s, threads, pending, calling, apOn);
   const list = tab === "ranked" ? s?.results ?? [] : s?.flagged ?? [];
   const mapListings = useMemo(() => [...(s?.results ?? []), ...(s?.flagged ?? [])], [s?.results, s?.flagged]);
   const hasResults = (s?.results.length ?? 0) + (s?.flagged.length ?? 0) > 0;
@@ -444,24 +463,93 @@ export default function Dashboard({ elevenLabsAgentId, user = null }: { elevenLa
   const consentOpts = consent?.options?.length ? consent.options : CONSENT;
   const followUps = useMemo(() => followUpsFor({ stage: s?.autopilot?.stage, results: s?.results ?? [], flagged: s?.flagged ?? [], threads, events: s?.events ?? [], consentPending: !!consent?.approvalId }),
     [s?.autopilot?.stage, s?.results, s?.flagged, s?.events, threads, consent?.approvalId]);
+  const showList = (t: "ranked" | "flagged") => { setTab(t); setView("list"); setShowAll(true); setPane("home"); setMobile("places"); };
   const pickFollowUp = (f: FollowUp) => {
     if (f.consent && consent?.approvalId) { void approve(consent.approvalId, true, consentOpts[0]); return; }
     if (f.prefill !== undefined) { setInput(f.prefill); requestAnimationFrame(() => { const el = inputRef.current; if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } }); return; }
-    if (f.tab) { setTab(f.tab); setView("list"); }
+    if (f.tab) showList(f.tab);
     void send(f.text ?? f.label);
   };
   const events = s?.events ?? [];
-  // On desktop the autopilot consent lives only in the chat (where the conversation is); on a phone the Deals tab keeps its card.
-  const sideNeeds = narrow ? needs : needs.filter((n) => n.kind !== "autopilot_consent");
-  const dealsEmpty = !sideNeeds.length && !events.length && !threads.length;
-  // Craigslist drafts are optional (a human must click Reply there); only real decisions count as "needs you".
-  const needCount = sideNeeds.filter((x) => x.kind !== "craigslist_replies").reduce((n, x) => n + (x.items?.length ?? 1), 0);
+  const calls = useMemo(() => s?.calls ?? [], [s?.calls]);
+  // Decisions that need a tap (not the consent, which sits on the hero and in the chat; Craigslist drafts live in Activity).
+  const homeNeeds = needs.filter((n) => n.kind !== "autopilot_consent" && n.kind !== "craigslist_replies");
+  const clNeeds = needs.filter((n) => n.kind === "craigslist_replies");
   const listingOf = (approvalId?: string, listingId?: string) => {
     const lid = listingId ?? s?.approvals.find((a) => a.id === approvalId)?.listingId;
     return lid ? mapListings.find((l) => l.id === lid) : undefined;
   };
 
-  const needCards = sideNeeds.map((n) => <NeedCard key={n.key} n={n} listingOf={listingOf} onApprove={(id, ok, ans) => void approve(id, ok, ans)} onPaste={openAndPaste} />);
+  // Which hero the Home pane shows.
+  const bookedThread = threads.find((t) => t.status === "booked");
+  const ui: "empty" | "searching" | "results" | "working" | "booked" =
+    events.length || bookedThread ? "booked" : threads.length ? "working" : hasResults ? "results" : searching || busy ? "searching" : "empty";
+  const focus = useMemo(() => [...threads].sort((a, b) => lastAt(b, callOf(b, calls)).localeCompare(lastAt(a, callOf(a, calls))))[0], [threads, calls]);
+
+  // Activity badge: events (emails, calls) since the Activity tab was last looked at.
+  const [seenAt, setSeenAt] = useState(() => new Date().toISOString());
+  const stamps = useMemo(() => [...threads.flatMap((t) => t.messages.filter((x) => x.channel !== "call").map((x) => x.at)), ...calls.map((c) => c.startedAt)], [threads, calls]);
+  const activityOn = narrow ? mobile === "activity" : pane === "activity";
+  const newest = stamps.reduce((a, b) => (b > a ? b : a), "");
+  useEffect(() => { if (activityOn && newest > seenAt) setSeenAt(newest); }, [activityOn, newest, seenAt]);
+  const unread = activityOn ? 0 : stamps.filter((x) => x > seenAt).length;
+  const openDeal = (id: string) => { setOpenThread(id); setPane("activity"); setMobile("activity"); };
+
+  const needCards = homeNeeds.map((n) => <NeedCard key={n.key} n={n} listingOf={listingOf} onApprove={(id, ok, ans) => void approve(id, ok, ans)} onPaste={openAndPaste} />);
+  const top = s?.results[0];
+  const receipt = [scanned ? `${scanned.toLocaleString("en-US")} scanned` : null, `${stats.blocked} scam${stats.blocked === 1 ? "" : "s"} blocked`,
+    `~${stats.minutes < 60 ? `${Math.max(1, Math.round(stats.minutes))} min` : `${Math.round(stats.minutes / 60)}h`} saved`].filter(Boolean).join(" · ");
+  const ev = events.find((e) => bookedThread && e.title.includes(bookedThread.listingTitle)) ?? events[0];
+  const bookedDeal = bookedThread ? deal(bookedThread, listingOf(undefined, bookedThread.listingId)) : null;
+  const hero = ui === "searching" ? <div className="hero hx-scan"><Scanning /></div>
+    : ui === "results" ? (top ? <MatchHero l={top} onXray={() => setXray(top.id)} onContact={() => void contact(top.id)}
+        consent={consent?.approvalId ? { options: consentOpts, onPick: (o) => void approve(consent.approvalId!, true, o) } : undefined} />
+      : <div className="hero hx-none"><b>No safe matches</b></div>)
+    : ui === "working" && focus ? <WorkHero t={focus} l={listingOf(undefined, focus.listingId)} call={callOf(focus, calls)} onOpen={() => openDeal(focus.id)} />
+    : ui === "booked" && ev ? <BookedHero e={ev} title={bookedThread?.listingTitle ?? ev.title} receipt={receipt} gcal={gcalLink(ev)} ics={icsHref(ev)}
+        saved={bookedDeal?.offered && bookedDeal.asked > bookedDeal.offered ? bookedDeal.asked - bookedDeal.offered : undefined} />
+    : ui === "booked" && bookedThread ? <WorkHero t={bookedThread} l={listingOf(undefined, bookedThread.listingId)} call={callOf(bookedThread, calls)} onOpen={() => openDeal(bookedThread.id)} />
+    : null;
+
+  const nSafe = s?.results.length ?? 0, nScam = s?.flagged.length ?? 0;
+  const fullList = <>
+    <div className="homes-bar">
+      <div className="seg">
+        <button className={tab === "ranked" ? "on" : ""} onClick={() => setTab("ranked")}>Matches <span>{nSafe}</span></button>
+        <button className={`${tab === "flagged" ? "on" : ""} red`} onClick={() => setTab("flagged")}>Scams <span>{nScam}</span></button>
+      </div>
+      <span className="grow" />
+      <div className="seg sm">
+        <button className={view === "list" ? "on" : ""} onClick={() => setView("list")}>List</button>
+        <button className={view === "map" ? "on" : ""} onClick={() => setView("map")}>Map</button>
+      </div>
+      {!narrow && <button className="ghost xs more-less" onClick={() => setShowAll(false)}>Less</button>}
+    </div>
+    {view === "map" ? (
+      <div className="map-wrap">
+        <MapView listings={mapListings} near={s?.criteria?.near ?? []} hovered={hovered} />
+        <div className="map-legend"><span><i className="g" />Looks safe</span><span><i className="y" />Caution</span><span><i className="r" />Likely scam</span></div>
+      </div>
+    ) : (
+      <div className="scroll listings">
+        {searching && <div className="refreshing"><span className="spin" />Searching again…</div>}
+        {list.map((l, i) => <ListingCard key={l.id} l={l} i={tab === "ranked" ? i : undefined} onContact={tab === "ranked" ? (id) => void contact(id) : undefined} pinned={l.id === s?.analyzedId} onHover={setHovered} onXray={setXray} />)}
+        {!list.length && <div className="empty">{tab === "ranked" ? "No safe matches." : "No scams found."}</div>}
+      </div>
+    )}
+  </>;
+  const more = ui === "booked" ? Math.max(0, nSafe - 1) : nSafe;
+  const collapsed = <div className="more">
+    {ui === "results" && s?.results.slice(1, 3).map((l, i) => <MatchRow key={l.id} l={l} rank={i + 2} onHover={setHovered} />)}
+    {hasResults && (ui === "booked"
+      ? <button type="button" className="more-link" onClick={() => showList("ranked")}>{more} more if this falls through<span aria-hidden="true">▸</span></button>
+      : <div className="more-links">
+        <button type="button" className="more-link" onClick={() => showList("ranked")}>See all {nSafe}</button>
+        {nScam > 0 && <><span aria-hidden="true">·</span><button type="button" className="more-link red" onClick={() => showList("flagged")}>{nScam} scam{nScam === 1 ? "" : "s"} blocked</button></>}
+      </div>)}
+  </div>;
+  const listOpen = narrow || showAll;
+
   return (
     <>
       {elevenLabsAgentId && <Script src="https://unpkg.com/@elevenlabs/convai-widget-embed" strategy="afterInteractive" />}
@@ -477,35 +565,14 @@ export default function Dashboard({ elevenLabsAgentId, user = null }: { elevenLa
           </button>
           <span id="ap-tip" role="tooltip" className="tip">{AP_TIP}</span>
         </div>
-        <button className="ghost" onClick={() => { void call("/api/mail/poll"); toast("Checking mail…"); }}>Check mail</button>
-        <button className="ghost" onClick={() => void reset()}>Reset</button>
-        {m && <details className="sys">
-          <summary aria-label={`System status, ${liveModes.length} live integrations`} title={`${liveModes.length} live`}><span className={liveModes.length ? "live-dot" : "idle-dot"} /></summary>
-          <div className="sys-pop">
-            <div className="sys-h">{liveModes.length ? `${liveModes.length} live: ${liveModes.join(", ")}` : "Running on mock backends"}</div>
-            {([["LLM", m.llm, m.llm !== "mock"], ["Craigslist", m.craigslist, m.craigslist === "live"], ["Mail", m.mail, m.mail !== "mock"], ["Calendar", m.calendar, m.calendar !== "mock"], ["Voice", m.voice, true]] as [string, string, boolean][])
-              .map(([k, v, on]) => <div key={k}><i className={on ? "on" : ""} />{k}<b>{v}</b></div>)}
-            {m.agentInbox && <div className="sys-inbox">Agent inbox: {m.agentInbox}</div>}
-            <Link className="sys-link" href="/#agents">Use Sublet Sniper from your AI agent</Link>
-            <div className="sys-actions">
-              <button className="ghost sm" onClick={() => { void call("/api/mail/poll"); toast("Checking mail…"); }}>Check mail</button>
-              <button className="ghost sm" onClick={() => void reset()}>Reset</button>
-            </div>
-          </div>
-        </details>}
-        {user && <form className="who" action="/auth/signout" method="post">
-          <span className="who-email" title={user.email ?? "Guest"}>{user.guest ? "Guest" : user.email}</span>
-          <button className="ghost xs" type="submit">Sign out</button>
-        </form>}
+        <Account user={user} modes={m} onCheck={() => { void call("/api/mail/poll"); toast("Checking mail…"); }} onReset={() => void reset()} />
       </header>
 
-      <Mission criteria={s?.criteria} scanned={scanned} shown={s?.results.length ?? 0} flagged={s?.flagged.length ?? 0} threads={threads}
-        booked={events.length > 0 || threads.some((t) => t.status === "booked")} searching={searching}
-        now={nowNext.now} next={nowNext.next} stage={stage} blocked={stats.blocked} minutes={stats.minutes} />
-      <main className="grid" data-m={mobile}>
+      {ui !== "empty" && <StatusBar {...status} scanned={scanned} flagged={nScam} threads={threads} booked={ui === "booked"} searching={searching} stage={stage} />}
+      <main className={`grid${ui === "empty" ? " solo" : ""}`} data-m={mobile} data-ui={ui}>
         <section className="col col-chat">
+          {narrow && ui !== "empty" && <div className="m-hero">{needCards}{hero}</div>}
           <div className="panel chat">
-            <div className="ph"><span className="avatar lg"><Bot size={26} /></span><div><h2>Talk to your agent</h2>{busy && <small><span className="live-dot" />Working…</small>}</div></div>
             <div className="scroll chat-scroll">
               <ChatThread chat={chat} greeting={GREETING} typing={typing} idle={!busy && !listening}
                 consent={consent?.approvalId ? { options: consentOpts, onPick: (o) => void approve(consent.approvalId!, true, o) } : undefined}
@@ -533,81 +600,43 @@ export default function Dashboard({ elevenLabsAgentId, user = null }: { elevenLa
           </div>
         </section>
 
-        <section className="col col-homes">
-          <div className="panel homes">
-            <div className="ph ph-title"><div><h2>Places found</h2></div></div>
-            {hasResults && <div className="homes-bar">
-              <div className="seg">
-                <button className={tab === "ranked" ? "on" : ""} onClick={() => setTab("ranked")}>{narrow ? "Matches" : "Best matches"} <span>{s?.results.length ?? 0}</span></button>
-                <button className={`${tab === "flagged" ? "on" : ""} red`} onClick={() => setTab("flagged")}>{narrow ? "Scams" : "Scams caught"} <span>{s?.flagged.length ?? 0}</span></button>
-              </div>
-              <span className="grow" />
-              <div className="seg sm">
-                <button className={view === "list" ? "on" : ""} onClick={() => setView("list")}>List</button>
-                <button className={view === "map" ? "on" : ""} onClick={() => setView("map")}>Map</button>
-              </div>
-            </div>}
-            {searching && !hasResults ? <Scanning /> : !hasResults ? <FirstRun /> : view === "map" ? (
-              <div className="map-wrap">
-                <MapView listings={mapListings} near={s?.criteria?.near ?? []} hovered={hovered} />
-                <div className="map-legend"><span><i className="g" />Looks safe</span><span><i className="y" />Caution</span><span><i className="r" />Likely scam</span></div>
-              </div>
-            ) : (
-              <div className="scroll listings">
-                {searching && <div className="refreshing"><span className="spin" />Searching again…</div>}
-                {list.map((l, i) => <ListingCard key={l.id} l={l} i={tab === "ranked" ? i : undefined} onContact={tab === "ranked" ? (id) => void contact(id) : undefined} pinned={l.id === s?.analyzedId} onHover={setHovered} onXray={setXray} />)}
-                {!list.length && <div className="empty">{tab === "ranked" ? "No safe matches." : "No scams found."}</div>}
-              </div>
-            )}
-          </div>
-        </section>
-
-        <section className="col col-inbox">
-          <div className="panel side">
-            <div className="ph"><div><h2>Your agent at work</h2></div>
-              <span className="grow" />
-              {needCount > 0 && <span className="badge" title="Needs you">{needCount}</span>}</div>
-            {demo && threads.length > 0 && <div className="sim">
-              <span>Simulate landlord</span>
-              {["hello", "video", "slot", "scam"].map((p) => <button key={p} className="ghost xs" onClick={() => void landlord(p)}>{p}</button>)}</div>}
-            <div className="scroll">
-              {/* Once a viewing is booked it is the headline; leftover asks go below it.
-                  Craigslist hand-offs are a side task: they sit under the live threads so the negotiation stays in view. */}
-              {!events.length && needCards.filter((_, i) => sideNeeds[i].kind !== "craigslist_replies")}
-              {events.map((e) => {
-                const d = new Date(e.start);
-                return <div key={e.id} className="ticket-card hero">
-                  <div className="cal sm" aria-hidden="true"><span>{d.toLocaleString("en-US", { timeZone: LA, month: "short" })}</span><b>{d.toLocaleString("en-US", { timeZone: LA, day: "numeric" })}</b></div>
-                  <div className="tk-body"><div className="tk"><i aria-hidden="true">✓</i>Viewing booked</div><div className="tw">{fmtLong(e.start)}</div><div className="tt">{clean(e.title)}</div>
-                    <div className="tn">Pay nothing before you see it.</div>
-                    <div className="tk-actions">{e.link ? <a className="tk-primary" href={e.link} target="_blank" rel="noreferrer" aria-label="Open in Google Calendar">Open calendar</a> : <a className="tk-primary" href={gcalLink(e)} target="_blank" rel="noreferrer" aria-label="Add to Google Calendar">Add to calendar</a>}
-                      <a href={icsHref(e)} download="viewing.ics" aria-label="Download .ics file">.ics</a></div></div>
-                </div>;
-              })}
-              {events.length > 0 && needCards.filter((_, i) => sideNeeds[i].kind !== "craigslist_replies")}
-              <Inbox threads={threads} listings={mapListings} calls={s?.calls ?? []} canCall={!!m?.calls} onCall={(id) => void callLandlord(id)}
-                onBrowser={demo && m?.browserVoice ? (id) => void talkAsLandlord(id) : undefined} onEnd={endBrowserCall} browserLive={browserLive} />
-              {needCards.filter((_, i) => sideNeeds[i].kind === "craigslist_replies")}
-              {dealsEmpty && <div className="empty deals-empty">
-                <svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true"><path d="M4 6.5h16v11H4z M4 7l8 6 8-6" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" /></svg>
-                <b>{consent?.approvalId ? "Waiting for your OK" : "No deals yet"}</b></div>}
+        {ui !== "empty" && <section className="col col-main" data-pane={narrow ? (mobile === "activity" ? "activity" : "home") : pane}>
+          {!narrow && <div className="pane-tabs" role="tablist" aria-label="Views">
+            <button role="tab" aria-selected={pane === "home"} className={pane === "home" ? "on" : ""} onClick={() => setPane("home")}>Home</button>
+            <button role="tab" aria-selected={pane === "activity"} className={pane === "activity" ? "on" : ""} onClick={() => setPane("activity")} aria-label={unread ? `Activity, ${unread} new` : "Activity"}>
+              Activity{unread > 0 && <span className="badge" key={unread}>{unread}</span>}</button>
+          </div>}
+          {(narrow ? mobile === "activity" : pane === "activity") ? (
+            <div className="panel pane-act">
+              <Activity threads={threads} listings={mapListings} calls={calls} chat={chat} open={openThread} onOpen={setOpenThread}
+                canCall={!!m?.calls} onCall={(id) => void callLandlord(id)} onBrowser={demo && m?.browserVoice ? (id) => void talkAsLandlord(id) : undefined} onEnd={endBrowserCall} browserLive={browserLive}
+                sim={demo && threads.length > 0 ? <div className="sim"><span>Simulate landlord</span>
+                  {["hello", "video", "slot", "scam"].map((p) => <button key={p} className="ghost xs" onClick={() => void landlord(p)}>{p}</button>)}</div> : undefined}
+                extra={clNeeds.map((n) => <NeedCard key={n.key} n={n} listingOf={listingOf} onApprove={(id, ok, ans) => void approve(id, ok, ans)} onPaste={openAndPaste} />)} />
             </div>
-          </div>
-        </section>
+          ) : (
+            <div className="home-pane">
+              {!narrow && <>{needCards}{hero}</>}
+              {hasResults && (listOpen ? <div className="panel homes">{fullList}</div> : collapsed)}
+            </div>
+          )}
+        </section>}
+        {/* The live call overlays the main pane (the chat stays); on a phone it is a full-screen sheet. */}
         {stageCall && <CallStage key={stageCall.id} call={stageCall} onSettled={settleStage}
-          onTakeOver={() => { setMobile("inbox"); document.querySelector(`.th[data-thread="${CSS.escape(stageCall.threadId)}"]`)?.scrollIntoView({ block: "nearest" }); }}
+          onTakeOver={() => openDeal(stageCall.threadId)}
           onEnd={stageCall.mode === "browser" && browserLive ? endBrowserCall : undefined} />}
       </main>
 
-      <nav className="mnav" aria-label="Sections">
-        <button className={mobile === "chat" ? "on" : ""} onClick={() => setMobile("chat")}>Agent</button>
-        <button className={mobile === "homes" ? "on" : ""} onClick={() => setMobile("homes")}>Places{hasResults && <span>{s?.results.length}</span>}</button>
-        <button className={mobile === "inbox" ? "on" : ""} onClick={() => setMobile("inbox")} aria-label={needCount ? `Deals, ${needCount} need you` : "Deals"}>
-          Deals{needCount > 0 ? <span className="hot">{needCount}</span> : threads.length > 0 && <span>{threads.length}</span>}</button>
-      </nav>
+      {ui !== "empty" && <nav className="mnav" aria-label="Sections">
+        <button className={mobile === "home" ? "on" : ""} onClick={() => setMobile("home")}>Home</button>
+        <button className={mobile === "places" ? "on" : ""} onClick={() => setMobile("places")}>Places{nSafe > 0 && <span>{nSafe}</span>}</button>
+        <button className={mobile === "activity" ? "on" : ""} onClick={() => setMobile("activity")} aria-label={unread ? `Activity, ${unread} new` : "Activity"}>
+          Activity{unread > 0 && <span className="hot">{unread}</span>}</button>
+      </nav>}
     </>
   );
 }
+
 
 function needCopy(n: Need): { title: string; body?: string; draft?: string } {
   switch (n.kind) {
