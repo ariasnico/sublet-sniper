@@ -118,7 +118,10 @@ function agentBody(toolIds, withDataCollection = true) {
       },
       // Noisy demo rooms: never let background voices cut the agent off mid-sentence, wait for the person to finish,
       // and don't answer speculatively. The person's words are still transcribed while the agent talks.
-      turn: { turn_timeout: 10, turn_eagerness: "patient", speculative_turn: false, transcribe_on_disabled_interruptions: true },
+      // Outbound PSTN (esp. international) connects the callee's audio a few seconds after "answered": wait for their
+      // "Hello?" before greeting, and re-engage if the line stays silent instead of waiting forever.
+      turn: { turn_timeout: 8, turn_eagerness: "patient", speculative_turn: false, transcribe_on_disabled_interruptions: true, initial_wait_time: 4,
+        soft_timeout_config: { timeout_seconds: 4, message: "Hi, can you hear me?", use_llm_generated_message: false, max_soft_timeouts_per_generation: 2 } },
       vad: { background_voice_detection: true },
       conversation: { client_events: ["audio", "agent_response", "user_transcript", "agent_response_correction", "agent_tool_response"] },
       ...(process.env.ELEVENLABS_VOICE_ID ? { tts: { voice_id: process.env.ELEVENLABS_VOICE_ID } } : {}),
