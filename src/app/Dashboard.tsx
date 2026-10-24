@@ -353,7 +353,7 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
               <span>Simulate landlord:</span>
               {["hello", "video", "slot", "scam"].map((p) => <button key={p} className="ghost xs" onClick={() => void landlord(p)}>{p}</button>)}</div>}
             <div className="scroll">
-              {side === "inbox" ? <Inbox threads={threads} inbox={m?.agentInbox} /> : <>
+              {side === "inbox" ? <Inbox threads={threads} inbox={m?.agentInbox} listings={mapListings} /> : <>
                 {s?.timeline.map((t) => <div key={t.id} className={`tl ${t.kind}`}><span className="ic">{ICON[t.kind] ?? "·"}</span><div><div className="txt">{t.text}</div><div className="when">{fmt(t.at)}</div></div></div>)}
                 {!s?.timeline.length && <div className="empty"><b>Quiet for now</b>Every search, email and booking your agent makes streams here live.</div>}
               </>}

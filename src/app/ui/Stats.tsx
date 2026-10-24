@@ -26,7 +26,7 @@ function Stat({ label, value, format, tone }: { label: string; value: number; fo
   const [bump, setBump] = useState(false);
   const prev = useRef(value);
   useEffect(() => {
-    if (value > prev.current) { setBump(true); const id = setTimeout(() => setBump(false), 600); prev.current = value; return () => clearTimeout(id); }
+    if (prev.current > 0 && value > prev.current) { setBump(true); const id = setTimeout(() => setBump(false), 600); prev.current = value; return () => clearTimeout(id); }
     prev.current = value;
   }, [value]);
   return <div className={`stat ${tone ?? ""}${bump ? " bump" : ""}`}><b>{format(v)}</b><span>{label}</span></div>;

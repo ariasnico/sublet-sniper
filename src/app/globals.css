@@ -400,3 +400,19 @@ input[type="checkbox"] { width: auto; accent-color: var(--accent); box-shadow: n
 .xr-foot a { flex: none; font-weight: 600; }
 @media (max-width: 1000px) { .xr-grid { grid-template-columns: 1fr; } .xr { padding: 20px; } .xr-pair img, .xr-noimg { height: 110px; } }
 @media (prefers-reduced-motion: reduce) { .xr, .xr-stack i, .xr-fill, .xr-signals li, .xr-body mark { animation: fade 160ms ease both !important; } }
+
+/* ── thread protocol + live replies ────────────────── */
+.proto { list-style: none; margin: 0 0 10px; padding: 0; display: flex; flex-wrap: wrap; gap: 5px; }
+.proto li { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 550; padding: 3px 9px 3px 4px; border-radius: 999px; background: var(--sunk); color: var(--faint); transition: background-color 300ms var(--ease-out), color 300ms var(--ease-out); }
+.proto i { width: 15px; height: 15px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-size: 9.5px; font-weight: 800; box-shadow: inset 0 0 0 1.5px var(--line-strong); }
+.proto li.ok { background: var(--green-soft); color: var(--green); } .proto li.ok i { background: var(--green-dot); color: #fff; box-shadow: none; }
+.proto li.blocked { background: var(--red-soft); color: var(--red); } .proto li.blocked i { background: var(--red-dot); color: #fff; box-shadow: none; }
+.th.pulse { animation: th-pulse 1.4s var(--ease-out); }
+@keyframes th-pulse { 0% { box-shadow: 0 0 0 1px var(--line), 0 0 0 0 var(--accent-ring); } 30% { box-shadow: 0 0 0 1px var(--accent), 0 0 0 6px var(--accent-ring); } 100% { box-shadow: 0 0 0 1px var(--line), 0 0 0 0 rgba(249,115,22,0); } }
+.bub.live { box-shadow: 0 0 0 1px rgba(249,115,22,.35); }
+.caret { display: inline-block; width: 2px; height: 1.05em; margin-left: 1px; vertical-align: text-bottom; background: var(--accent); animation: blink 900ms steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+.bub.replying { display: flex; flex-direction: column; }
+.bub.replying .typing { padding: 4px 0 2px; }
+.replying-t { font-size: 12px; color: var(--accent-strong); }
+@media (prefers-reduced-motion: reduce) { .th.pulse, .caret { animation: none !important; } }
