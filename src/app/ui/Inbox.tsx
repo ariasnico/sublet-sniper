@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Thread } from "@/lib/store";
 import type { RankedListing } from "@/lib/types";
 
-const STATUS: Record<Thread["status"], string> = { awaiting_landlord: "Waiting on landlord", active: "Negotiating", viewing_proposed: "Slots offered", booked: "Viewing booked", flagged: "Scam refused" };
+const STATUS: Record<Thread["status"], string> = { awaiting_landlord: "Emailed, waiting", active: "Talking", viewing_proposed: "Slots offered", booked: "Viewing booked", flagged: "Scam refused" };
 const ago = (iso: string) => {
   const m = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
   return m < 1 ? "now" : m < 60 ? `${m}m` : m < 1440 ? `${Math.round(m / 60)}h` : `${Math.round(m / 1440)}d`;
@@ -16,7 +16,7 @@ function protocol(t: Thread, l?: RankedListing): Check[] {
   const landlord = t.messages.filter((m) => m.from === "landlord").map((m) => m.text).join("\n");
   const flagged = t.messages.some((m) => m.flagged);
   return [
-    { k: l ? `Scam score ${l.scam.score}` : "Scam score checked", state: !l || l.scam.light === "green" ? "ok" : "blocked" },
+    { k: !l || l.scam.light === "green" ? "Passed scam check" : `Scam score ${l.scam.score}`, state: !l || l.scam.light === "green" ? "ok" : "blocked" },
     { k: "Live video tour", state: /video (tour|walkthrough|call)|facetime|zoom/i.test(landlord) ? "ok" : "wait" },
     { k: "Leaseholder confirmed", state: /\b(i(?:'m| am) the (owner|leaseholder|tenant on the lease)|my name is on the lease|landlord (approved|approval|is ok)|sublease (addendum|agreement))\b/i.test(landlord) ? "ok" : "wait" },
     { k: flagged ? "Money request refused" : "No money before viewing", state: flagged ? "blocked" : "ok" },
@@ -60,7 +60,7 @@ function Bubble({ x }: { x: Thread["messages"][number] }) {
   );
 }
 
-function ThreadCard({ t, inbox, listing }: { t: Thread; inbox?: string; listing?: RankedListing }) {
+function ThreadCard({ t, listing }: { t: Thread; listing?: RankedListing }) {
   const [all, setAll] = useState(false);
   const msgs = all ? t.messages : t.messages.slice(-3);
   const last = t.messages[t.messages.length - 1];
@@ -78,8 +78,8 @@ function ThreadCard({ t, inbox, listing }: { t: Thread; inbox?: string; listing?
         <div className="th-title">{t.listingTitle.replace(/^\[DEMO DATA\]\s*/, "")}</div>
         <span className={`st st-${t.status}`}>{STATUS[t.status] ?? t.status}</span>
       </div>
-      <div className="th-meta">Between {inbox ?? "your agent inbox"} and {t.landlordEmail}</div>
-      <ul className="proto" aria-label="Safety protocol">
+      <div className="th-k">Safety checks</div>
+      <ul className="proto" aria-label="Safety checks">
         {protocol(t, listing).map((c) => <li key={c.k} className={c.state}>
           <i aria-hidden="true">{c.state === "ok" ? "✓" : c.state === "blocked" ? "!" : ""}</i>{c.k}</li>)}
       </ul>
@@ -87,7 +87,7 @@ function ThreadCard({ t, inbox, listing }: { t: Thread; inbox?: string; listing?
         <div className="deal">
           {d.listed && <div><span>Listed</span><b>${d.listed.toLocaleString("en-US")}</b></div>}
           <div className="asked"><span>They asked</span><b>${d.asked.toLocaleString("en-US")}</b></div>
-          <div className={d.offered ? "offer" : "pending"}><span>Agent offered</span><b>{d.offered ? `$${d.offered.toLocaleString("en-US")}` : "…"}</b></div>
+          <div className={d.offered ? "offer" : "pending"}><span>{t.status === "booked" ? "Agent got" : "Agent offered"}</span><b>{d.offered ? `$${d.offered.toLocaleString("en-US")}` : "…"}</b></div>
           {save > 0 && <div className="save"><span>You save</span><b>${save.toLocaleString("en-US")}/mo</b></div>}
         </div>); })()}
       {t.messages.length > 3 && <button className="th-more" onClick={() => setAll(!all)}>{all ? "Show latest only" : `Show ${t.messages.length - 3} earlier`}</button>}
@@ -99,7 +99,6 @@ function ThreadCard({ t, inbox, listing }: { t: Thread; inbox?: string; listing?
   );
 }
 
-export function Inbox({ threads, inbox, listings = [] }: { threads: Thread[]; inbox?: string; listings?: RankedListing[] }) {
-  if (!threads.length) return <div className="empty"><b>No conversations yet</b>Approve contact on a listing and your agent emails the landlord, as you.</div>;
-  return <>{threads.map((t) => <ThreadCard key={t.id} t={t} inbox={inbox} listing={listings.find((l) => l.id === t.listingId)} />)}</>;
+export function Inbox({ threads, listings = [] }: { threads: Thread[]; listings?: RankedListing[] }) {
+  return <>{threads.map((t) => <ThreadCard key={t.id} t={t} listing={listings.find((l) => l.id === t.listingId)} />)}</>;
 }

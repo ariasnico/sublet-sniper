@@ -1,7 +1,7 @@
 "use client";
 import { useEffect } from "react";
 
-export type MomentData = { kind: "scam"; title: string; detail: string } | { kind: "booked"; title: string; when: string; day: string; month: string };
+export type MomentData = { kind: "scam"; title: string; detail: string; saved?: number } | { kind: "booked"; title: string; when: string; day: string; month: string };
 
 /** Full-screen beat for the two moments that matter in the demo. Auto-dismisses; click anywhere to close. */
 export function Moment({ m, onDone }: { m: MomentData | null; onDone: () => void }) {
@@ -21,7 +21,8 @@ export function Moment({ m, onDone }: { m: MomentData | null; onDone: () => void
           <div className="stamp">SCAM BLOCKED</div>
           <p className="moment-title">{m.title}</p>
           <p className="moment-sub">{m.detail}</p>
-          <p className="moment-foot">Your agent refused. Not a single dollar left your account.</p>
+          {m.saved ? <p className="moment-saved"><b>${m.saved.toLocaleString("en-US")}</b> protected. Your agent refused to pay before a viewing.</p>
+            : <p className="moment-foot">Your agent refused. Not a single dollar left your account.</p>}
         </div>
       ) : (
         <div className="moment-card ticket">

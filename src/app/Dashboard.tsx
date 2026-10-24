@@ -5,10 +5,9 @@ import Script from "next/script";
 import { Toaster, toast } from "sonner";
 import { Bot } from "./Bot";
 import { ListingCard } from "./ui/ListingCard";
-import { Stats, type StatValues } from "./ui/Stats";
 import { Moment, type MomentData } from "./ui/Moment";
-import { Inbox } from "./ui/Inbox";
-import { Mission } from "./ui/Mission";
+import { Inbox, deal } from "./ui/Inbox";
+import { Mission, type Autopilot } from "./ui/Mission";
 import { XRay } from "./ui/XRay";
 import { Rich } from "./ui/Rich";
 import type { Criteria, RankedListing } from "@/lib/types";
@@ -18,7 +17,7 @@ const MapView = dynamic(() => import("./ui/MapView"), { ssr: false, loading: () 
 
 interface Modes { llm: string; mail: string; calendar: string; craigslist: string; voice: string; agentInbox: string }
 interface S { version?: string; analyzedId?: string | null; criteria?: Criteria | null; results: RankedListing[]; flagged: RankedListing[]; timeline: TimelineItem[]; approvals: Approval[]; threads: Thread[]; chat: ChatMsg[];
-  events: { id: string; title: string; start: string; end?: string; link?: string }[]; modes: Modes; searchReport: { mode: string; total: number } | null }
+  events: { id: string; title: string; start: string; end?: string; link?: string }[]; modes: Modes; searchReport: { mode: string; total: number } | null; autopilot?: Autopilot }
 
 interface SR { lang: string; interimResults: boolean; continuous?: boolean; onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }> & { isFinal: boolean }> }) => void) | null; onend: (() => void) | null; start(): void; stop(): void }
 type SRCtor = new () => SR;
@@ -26,10 +25,14 @@ type SRCtor = new () => SR;
 const LA = "America/Los_Angeles";
 const fmt = (iso: string) => new Date(iso).toLocaleString("en-US", { timeZone: LA, weekday: "short", hour: "numeric", minute: "2-digit" }) + " PT";
 const fmtLong = (iso: string) => new Date(iso).toLocaleString("en-US", { timeZone: LA, weekday: "long", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) + " PT";
-const ICON: Record<string, string> = { search: "🔎", scam: "🛡️", draft: "✍️", email_out: "📤", email_in: "📩", calendar: "📅", decision: "🤔", flag: "🚩", info: "·" };
+const clean = (t: string) => t.replace(/^Viewing: /, "").replace(/^\[DEMO DATA\]\s*/, "");
+const short = (t: string, n = 38) => { const c = clean(t); return c.length > n ? `${c.slice(0, n - 1).trimEnd()}…` : c; };
 const SUGGEST = "Busco 1BR amoblado en SF, menos de $4000, del 1/11 al 15/12";
 const CHIPS = [SUGGEST, "Furnished room near Caltrain under $2,500 for November", "¿Cómo detectás si un aviso es un scam?"];
 const SCAN_STEPS = ["Scanning Craigslist sublets, rooms and apartments", "Normalizing prices to monthly", "Comparing every price to SF medians", "Checking photos for reuse across listings", "Looking for wire, Zelle and out-of-country red flags", "Ranking by fit, distance and dates"];
+const CONSENT = ["Yes, go", "I'll approve each step"];
+const AP_TIP = "On: your agent emails safe landlords, negotiates and books. You only click Reply on real Craigslist listings.";
+const kindOf = (a: Approval) => a.kind as string;
 
 async function post<T>(url: string, body?: unknown, timeoutMs = 60000): Promise<T> {
   const r = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body ?? {}), signal: AbortSignal.timeout(timeoutMs) });
@@ -47,26 +50,52 @@ function Scanning() {
   );
 }
 
-function Hero({ onTry }: { onTry: (t: string) => void }) {
+function FirstRun() {
   return (
-    <div className="hero">
-      <h2>Finds the sublet, blocks the scammers, books the viewing.</h2>
-      <p>Tell it what you need by voice or text, in Spanish or English. It searches Craigslist live, scores every listing for scams, emails landlords as you and puts the viewing on your calendar. You only approve.</p>
-      <div className="specimen" aria-hidden="true">
-        <div className="sp sp-bad">
-          <div className="sp-photo"><span>SCAM</span></div>
-          <div className="sp-body"><b>$1,100<small>/mo</small></b><span>Sunny 1BR on Ortega St</span><em>“I&apos;m abroad, Zelle the deposit and I&apos;ll mail the keys”</em></div>
-          <div className="sp-score red">94</div>
-        </div>
-        <div className="sp sp-good">
-          <div className="sp-photo ok" />
-          <div className="sp-body"><b>$3,600<small>/mo</small></b><span>Furnished 1BR near Caltrain</span><em>Landlord offered a video tour Monday after 5pm</em></div>
-          <div className="sp-score green">8</div>
-        </div>
-      </div>
-      <button className="primary lg" onClick={() => onTry(SUGGEST)}>Search: “{SUGGEST}”</button>
+    <div className="first">
+      <div className="first-bot"><Bot size={104} /></div>
+      <h3>Nothing here yet</h3>
+      <p>Describe what you need on the left. Your agent searches Craigslist live, scores every listing for scams and ranks the safe ones here.</p>
     </div>
   );
+}
+
+/** What the agent is doing right now and what it will do next, read from the state itself (used until the backend reports it). */
+function deriveNowNext(s: S | null, threads: Thread[], pending: Approval[], busy: boolean, autopilot: boolean): { now: string; next: string } {
+  if (!s) return { now: "Getting ready", next: "Listen for what you need" };
+  const safe = s.results.length, scams = s.flagged.length;
+  const afterSearch = safe ? (autopilot ? "Email the best safe landlord as you" : "Pick a place and let your agent reach out") : "Search again with a bigger budget";
+  const base = ((): { now: string; next: string } => {
+    const p = pending[0];
+    if (p) {
+      const k = kindOf(p);
+      if (k === "autopilot_consent") return { now: "Waiting for your OK to run on autopilot", next: "Email the best safe landlord as you" };
+      if (k === "open_craigslist_reply") return { now: "Waiting for you to click Reply on Craigslist", next: "Read the landlord's answer and negotiate" };
+      if (k === "send_contact") return { now: "Waiting for your OK to email the landlord", next: "Ask for a live video tour and leaseholder proof" };
+      if (k === "book_viewing") return { now: `Waiting for your OK to book ${p.body.split(" with ")[0] || "the viewing"}`, next: "Put the viewing on your calendar" };
+      return { now: `Waiting for your answer: ${p.title}`, next: "Keep the deal moving" };
+    }
+    const ordered = [...threads].sort((a, b) => (b.messages.at(-1)?.at ?? "").localeCompare(a.messages.at(-1)?.at ?? ""));
+    const t = ordered.find((x) => x.status === "booked") ?? ordered[0];
+    if (t) {
+      const last = t.messages.at(-1);
+      if (t.status === "booked") {
+        const ev = s.events.find((e) => e.title.includes(t.listingTitle)) ?? s.events[0];
+        return { now: ev ? `Viewing booked for ${fmt(ev.start)}` : "Viewing booked with the landlord", next: "Go see it, and pay nothing before you do" };
+      }
+      if (t.status === "flagged") return { now: "Refused a request for money before any viewing", next: safe > 1 ? "Move on to the next safe listing" : "Search again for safer options" };
+      if (t.status === "viewing_proposed") return { now: "Offered the landlord viewing slots", next: "Book the slot the landlord picks" };
+      if (last?.from === "landlord") return { now: "Reading the landlord's reply", next: "Counter under your budget and ask for a viewing" };
+      if (t.status === "active") {
+        const d = deal(t);
+        return { now: d?.offered ? `Countered at $${d.offered.toLocaleString("en-US")}, waiting on the landlord` : "Talking with the landlord", next: "Book the first slot that fits" };
+      }
+      return { now: "Emailed the landlord, waiting for a reply", next: "Negotiate the price once they reply" };
+    }
+    if (s.searchReport || safe || scams) return { now: `Ranked ${safe} safe place${safe === 1 ? "" : "s"}, blocked ${scams} scam${scams === 1 ? "" : "s"}`, next: afterSearch };
+    return { now: "Waiting for your request", next: "Search Craigslist live and score every listing" };
+  })();
+  return busy ? { now: "Thinking it through…", next: base.next } : base;
 }
 
 export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: string | null }) {
@@ -80,11 +109,15 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
   const [lang, setLang] = useState("es-AR");
   const [tab, setTab] = useState<"ranked" | "flagged">("ranked");
   const [view, setView] = useState<"list" | "map">("list");
-  const [side, setSide] = useState<"inbox" | "activity">("inbox");
   const [mobile, setMobile] = useState<"chat" | "homes" | "inbox">("chat");
   const [hovered, setHovered] = useState<string | null>(null);
   const [moment, setMoment] = useState<MomentData | null>(null);
   const [xray, setXray] = useState<string | null>(null);
+  const [demo, setDemo] = useState(false);
+  const [apLocal, setApLocal] = useState<boolean | null>(null);
+  // Stable callbacks: the 2.5s poll re-renders, and a fresh onDone would restart the moment's auto-dismiss timer.
+  const closeMoment = useCallback(() => setMoment(null), []);
+  const closeXray = useCallback(() => setXray(null), []);
   const recRef = useRef<SR | null>(null);
   const chatEnd = useRef<HTMLDivElement | null>(null);
 
@@ -93,7 +126,7 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
   const adopt = useCallback((next: S | undefined) => {
     if (!next) return;
     const b = best.current;
-    if (b && (b.version ?? "") > (next.version ?? "")) { const merged = { ...b, threads: next.threads, modes: next.modes }; best.current = merged; setS(merged); return; }
+    if (b && (b.version ?? "") > (next.version ?? "")) { const merged = { ...b, threads: next.threads, modes: next.modes, autopilot: next.autopilot ?? b.autopilot }; best.current = merged; setS(merged); return; }
     best.current = next; setS(next);
   }, []);
   const refresh = useCallback(async () => { const r = await fetch("/api/state", { cache: "no-store" }); adopt((await r.json()) as S); }, [adopt]);
@@ -103,6 +136,13 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
     return r;
   }, [adopt]);
   useEffect(() => { void refresh(); const id = setInterval(() => void refresh(), 2500); return () => clearInterval(id); }, [refresh]);
+  useEffect(() => { setDemo(new URLSearchParams(window.location.search).get("demo") === "1"); }, []);
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => {
+    const q = window.matchMedia("(max-width: 1000px)");
+    const on = () => setNarrow(q.matches); on();
+    q.addEventListener("change", on); return () => q.removeEventListener("change", on);
+  }, []);
   const mailLive = s?.modes.mail === "agentmail";
   useEffect(() => {
     if (!mailLive) return;
@@ -114,6 +154,8 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
   const [resetAt, setResetAt] = useState("");
   useEffect(() => { setResetAt(localStorage.getItem("sniper-reset-at") ?? ""); }, []);
   const threads = useMemo(() => (s?.threads ?? []).filter((t) => !resetAt || t.messages.some((x) => x.at > resetAt)), [s?.threads, resetAt]);
+  const pending = useMemo(() => (s?.approvals ?? []).filter((a) => a.status === "pending")
+    .sort((a, b) => Number(kindOf(b) === "autopilot_consent") - Number(kindOf(a) === "autopilot_consent")), [s?.approvals]);
 
   // Moments: fire once per new scam refusal / booking. Mail can be processed on another instance (webhook),
   // so we watch the threads themselves, not only this instance's timeline.
@@ -127,13 +169,17 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
     if (!s) return;
     const keys: [string, () => MomentData | null][] = [];
     for (const t of threads) {
-      t.messages.forEach((x, i) => { if (x.flagged) keys.push([`flag:${t.id}:${i}`, () => ({ kind: "scam", title: t.listingTitle.replace(/^\[DEMO DATA\]\s*/, ""), detail: `Landlord asked for: ${x.flagged!.join(", ")}` })]); });
+      t.messages.forEach((x, i) => {
+        if (!x.flagged) return;
+        const asked = Math.max(0, ...[...x.text.replace(/,/g, "").matchAll(/\$\s?(\d{3,6})(?!\d)/g)].map((m) => Number(m[1])));
+        keys.push([`flag:${t.id}:${i}`, () => ({ kind: "scam", title: clean(t.listingTitle), detail: `Landlord asked for: ${x.flagged!.join(", ")}`, saved: asked || undefined })]);
+      });
       if (t.status === "booked") keys.push([`booked:${t.id}`, () => {
         const ev = s.events.find((e) => e.title.includes(t.listingTitle)) ?? s.events[0];
-        return ev ? bookedMoment(t.listingTitle, ev.start) : { kind: "booked", title: t.listingTitle.replace(/^\[DEMO DATA\]\s*/, ""), when: "Confirmed with the landlord", day: "✓", month: "BOOKED" };
+        return ev ? bookedMoment(t.listingTitle, ev.start) : { kind: "booked", title: clean(t.listingTitle), when: "Confirmed with the landlord", day: "✓", month: "Booked" };
       }]);
     }
-    for (const e of s.events) keys.push([`ev:${e.id}`, () => bookedMoment(e.title.replace(/^Viewing: /, ""), e.start)]);
+    for (const e of s.events) keys.push([`ev:${e.id}`, () => bookedMoment(clean(e.title), e.start)]);
     for (const t of s.timeline) if (t.kind === "flag" && /^Refused/.test(t.text)) keys.push([`tl:${t.id}`, () => ({ kind: "scam", title: t.text.replace(/^Refused to contact red listing /, "").replace(/"/g, ""), detail: "Your agent will not contact a listing it scored as a likely scam." })]);
     if (!seen.current) { seen.current = new Set(keys.map(([k]) => k)); return; }
     for (const [k, make] of keys) {
@@ -142,6 +188,21 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
       const m = make(); if (m) fire(m);
     }
   }, [s, threads, fire]);
+
+  // A new "needs you" card gets a toast so it can't be missed.
+  const seenNeeds = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    if (!s) return;
+    if (!seenNeeds.current) { seenNeeds.current = new Set(pending.map((a) => a.id)); return; }
+    let fresh = false;
+    for (const a of pending) {
+      if (seenNeeds.current.has(a.id)) continue;
+      seenNeeds.current.add(a.id); fresh = true;
+      toast.warning("Your agent needs you", { description: needCopy(a).title });
+    }
+    // On a phone, jump straight to the card that needs a tap.
+    if (fresh && window.matchMedia("(max-width: 1000px)").matches) setMobile("inbox");
+  }, [s, pending]);
 
   // A pasted link that scores risky opens its X-ray right away.
   const lastAnalyzed = useRef<string | null | undefined>(undefined);
@@ -158,7 +219,7 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
   // Rehearsal: ?preview=scam or ?preview=booked shows a moment without sending any email.
   useEffect(() => {
     const p = new URLSearchParams(window.location.search).get("preview");
-    if (p === "scam") setMoment({ kind: "scam", title: "Furnished 1BR sublet near Caltrain", detail: "Landlord asked for: Zelle deposit before any viewing" });
+    if (p === "scam") setMoment({ kind: "scam", title: "Furnished 1BR sublet near Caltrain", detail: "Landlord asked for: Zelle deposit before any viewing", saved: 7200 });
     if (p === "booked") setMoment(bookedMoment("Furnished 1BR sublet near Caltrain", new Date(Date.now() + 2 * 864e5).toISOString()));
   }, []);
 
@@ -181,7 +242,7 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
     if (!s?.chat.length && !busy) return;
     chatEnd.current?.scrollIntoView({ behavior: scrolledOnce.current ? "smooth" : "auto", block: "end" });
     scrolledOnce.current = true;
-  }, [s?.chat.length, busy]);
+  }, [s?.chat.length, busy, pending.length]);
 
   const say = (text: string) => {
     if (!speak || typeof window === "undefined" || !("speechSynthesis" in window)) return;
@@ -193,9 +254,14 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
     sentAt.current = new Date().toISOString(); setBusy(true); setInput("");
     const isSearch = /busc|search|looking|find|encontr|1br|studio|room|depto|amobl|furnish|\$\d/i.test(text) && !/https?:\/\//.test(text);
     if (isSearch) { setSearching(true); setMobile("homes"); setTab("ranked"); }
+    const t0 = Date.now();
     try { const r = await call<{ reply: string }>("/api/agent", { text }); if (r.reply) say(r.reply); }
     catch { toast.error("The agent took too long", { description: "Try again in a moment." }); }
-    finally { setBusy(false); setSearching(false); void refresh(); }
+    finally {
+      // Let the Now line finish its scan beats even when the search comes back instantly (snapshot mode).
+      if (isSearch) await new Promise((r) => setTimeout(r, Math.max(0, 1700 - (Date.now() - t0))));
+      setBusy(false); setSearching(false); void refresh();
+    }
   };
   const lastMsg = s?.chat[s.chat.length - 1];
   const typing = busy && !(lastMsg?.role === "assistant" && lastMsg.at > sentAt.current);
@@ -215,72 +281,114 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
     rec.onend = () => { setListening(false); setTimeout(() => setHeard(""), 400); };
     recRef.current = rec; setListening(true); rec.start();
   };
-  const approve = async (id: string, ok: boolean, answer?: string) => {
+  const approve = async (id: string, ok: boolean, answer?: string, opened = false) => {
     const approval = s?.approvals.find((x) => x.id === id);
-    const r = await call<{ openUrl?: string; error?: string }>("/api/approve", { id, approve: ok, answer, approval });
-    if (r.openUrl) window.open(r.openUrl, "_blank", "noopener");
+    let r = await call<{ openUrl?: string; error?: string }>("/api/approve", { id, approve: ok, answer, approval });
+    // Older backends validate the approval kind strictly; retry without carrying it.
+    if (r.error === "bad body") r = await call<{ openUrl?: string; error?: string }>("/api/approve", { id, approve: ok, answer });
+    if (r.openUrl && !opened) window.open(r.openUrl, "_blank", "noopener");
     if (r.error) toast.error("Couldn't do that", { description: r.error });
-    if (ok && approval?.kind === "send_contact") { setSide("inbox"); setMobile("inbox"); }
+    if (ok && approval?.kind === "send_contact") setMobile("inbox");
     void refresh();
+  };
+  const openAndPaste = (a: Approval) => {
+    void navigator.clipboard?.writeText(a.body).catch(() => undefined);
+    const url = typeof a.payload?.url === "string" ? a.payload.url : null;
+    if (url) window.open(url, "_blank", "noopener");
+    toast.success("Message copied", { description: "Click Reply on Craigslist and paste it." });
+    void approve(a.id, true, undefined, !!url);
   };
   const contact = async (id: string) => { setMobile("chat"); await send(`Contactá el listing ${id}`).catch(() => undefined); };
   const landlord = async (preset: string) => { const r = await post<{ error?: string }>("/api/demo/landlord", { preset }); if (r.error) toast.error(r.error); void refresh(); };
-  const reset = async () => { const at = new Date().toISOString(); localStorage.setItem("sniper-reset-at", at); setResetAt(at); await post("/api/reset"); best.current = null; seen.current = null; setView("list"); void refresh(); toast("Fresh start", { description: "Session cleared." }); };
+  const reset = async () => { const at = new Date().toISOString(); localStorage.setItem("sniper-reset-at", at); setResetAt(at); await post("/api/reset"); best.current = null; seen.current = null; seenNeeds.current = null; setView("list"); void refresh(); toast("Fresh start", { description: "Session cleared." }); };
+
+  // Autopilot: the backend owns it when it reports s.autopilot; until then the toggle is optimistic and reverts on failure.
+  const apOn = apLocal ?? s?.autopilot?.on ?? false;
+  useEffect(() => { if (apLocal !== null && s?.autopilot?.on === apLocal) setApLocal(null); }, [s?.autopilot?.on, apLocal]);
+  const toggleAutopilot = async () => {
+    const on = !apOn; setApLocal(on);
+    try {
+      const r = await fetch("/api/autopilot", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ on, snapshot: best.current ?? undefined }), signal: AbortSignal.timeout(15000) });
+      if (!r.ok) throw new Error(String(r.status));
+      const j = (await r.json().catch(() => ({}))) as { state?: S };
+      adopt(j.state);
+      toast.success(on ? "Autopilot on" : "Autopilot off", { description: on ? "Your agent takes it from here. You only click Reply on real Craigslist listings." : "Your agent will ask before each step." });
+    } catch {
+      setApLocal(null);
+      toast.error("Autopilot isn't available yet", { description: "Approve each step from Deals in progress for now." });
+    }
+  };
 
   const m = s?.modes;
-  const pending = s?.approvals.filter((a) => a.status === "pending") ?? [];
-  const stats: StatValues = useMemo(() => {
-    const scanned = s?.searchReport?.total ?? 0;
+  const scanned = s?.searchReport?.total ?? 0;
+  const stats = useMemo(() => {
     const flaggedMsgs = threads.flatMap((t) => t.messages).filter((x) => x.flagged).length;
     const emails = threads.flatMap((t) => t.messages).filter((x) => x.from === "agent").length;
     const blocked = (s?.flagged.length ?? 0) + flaggedMsgs;
     const booked = (s?.events.length ?? 0) || threads.filter((t) => t.status === "booked").length;
     // Rough, stated assumptions: ~30 s to skim a listing, ~12 min per email exchanged, ~20 min to vet a scam, ~25 min to book.
-    const minutes = scanned * 0.5 + emails * 12 + (s?.flagged.length ?? 0) * 20 + flaggedMsgs * 20 + booked * 25;
-    // First month + deposit a scammer would ask for.
-    const protectedUsd = (s?.flagged ?? []).reduce((a, l) => a + Math.min((l.priceMonthly ?? 0) * 2, 20000), 0) + flaggedMsgs * 3600 * 2;
-    return { scanned, blocked, emails, minutes, protectedUsd };
-  }, [s?.searchReport, s?.flagged, s?.events, threads]);
+    const minutes = scanned * 0.5 + emails * 12 + blocked * 20 + booked * 25;
+    return { blocked, minutes };
+  }, [scanned, s?.flagged, s?.events, threads]);
+  const derived = deriveNowNext(s, threads, pending, busy && !searching, apOn);
+  const nowNext = s?.autopilot && !busy ? { now: s.autopilot.now || derived.now, next: s.autopilot.next || derived.next } : derived;
   const liveModes = m ? [m.llm !== "mock" && "OpenAI", m.craigslist === "live" && "Craigslist", m.mail !== "mock" && "AgentMail", m.calendar !== "mock" && "Calendar"].filter(Boolean) as string[] : [];
   const list = tab === "ranked" ? s?.results ?? [] : s?.flagged ?? [];
   const mapListings = useMemo(() => [...(s?.results ?? []), ...(s?.flagged ?? [])], [s?.results, s?.flagged]);
   const hasResults = (s?.results.length ?? 0) + (s?.flagged.length ?? 0) > 0;
   const chat = s?.chat ?? [];
+  const consent = pending.find((a) => kindOf(a) === "autopilot_consent");
+  const events = s?.events ?? [];
+  const dealsEmpty = !pending.length && !events.length && !threads.length;
 
   return (
     <>
       {elevenLabsAgentId && <Script src="https://unpkg.com/@elevenlabs/convai-widget-embed" strategy="afterInteractive" />}
-      <Toaster position="bottom-right" richColors theme="light" closeButton />
-      <Moment m={moment} onDone={() => setMoment(null)} />
-      <XRay l={xray ? mapListings.find((x) => x.id === xray) ?? null : null} onClose={() => setXray(null)} />
+      <Toaster position={narrow ? "top-center" : "bottom-right"} richColors theme="light" closeButton={!narrow} />
+      <Moment m={moment} onDone={closeMoment} />
+      <XRay l={xray ? mapListings.find((x) => x.id === xray) ?? null : null} onClose={closeXray} />
       <header className="top">
         <div className="brand"><Bot size={36} className="bot-wave" /><h1>Sublet Sniper<small>your personal rental agent</small></h1></div>
-        <Stats v={stats} />
         <span className="grow" />
+        <div className="tip-wrap">
+          <button className={`ap-toggle${apOn ? " on" : ""}`} role="switch" aria-checked={apOn} aria-describedby="ap-tip" onClick={() => void toggleAutopilot()}>
+            <span className="ap-track" aria-hidden="true"><i /></span>Autopilot {apOn ? "on" : "off"}
+          </button>
+          <span id="ap-tip" role="tooltip" className="tip">{AP_TIP}</span>
+        </div>
+        <button className="ghost" onClick={() => { void call("/api/mail/poll"); toast("Checking mail…"); }}>Check mail</button>
+        <button className="ghost" onClick={() => void reset()}>Reset</button>
         {m && <details className="sys">
-          <summary><span className="live-dot" />{liveModes.length} live</summary>
+          <summary aria-label={`System status, ${liveModes.length} live integrations`} title={`${liveModes.length} live`}><span className={liveModes.length ? "live-dot" : "idle-dot"} /></summary>
           <div className="sys-pop">
+            <div className="sys-h">{liveModes.length ? `${liveModes.length} live: ${liveModes.join(", ")}` : "Running on mock backends"}</div>
             {([["LLM", m.llm, m.llm !== "mock"], ["Craigslist", m.craigslist, m.craigslist === "live"], ["Mail", m.mail, m.mail !== "mock"], ["Calendar", m.calendar, m.calendar !== "mock"], ["Voice", m.voice, true]] as [string, string, boolean][])
               .map(([k, v, on]) => <div key={k}><i className={on ? "on" : ""} />{k}<b>{v}</b></div>)}
             {m.agentInbox && <div className="sys-inbox">Agent inbox: {m.agentInbox}</div>}
+            <div className="sys-actions">
+              <button className="ghost sm" onClick={() => { void call("/api/mail/poll"); toast("Checking mail…"); }}>Check mail</button>
+              <button className="ghost sm" onClick={() => void reset()}>Reset</button>
+            </div>
           </div>
         </details>}
-        <button className="ghost" onClick={() => { void call("/api/mail/poll"); toast("Checking mail…"); }}>Check mail</button>
-        <button className="ghost" onClick={() => void reset()}>Reset</button>
       </header>
 
-      <Mission criteria={s?.criteria} scanned={stats.scanned} shown={s?.results.length ?? 0} flagged={s?.flagged.length ?? 0} threads={threads}
-        booked={(s?.events.length ?? 0) > 0 || threads.some((t) => t.status === "booked")} searching={searching} />
+      <Mission criteria={s?.criteria} scanned={scanned} shown={s?.results.length ?? 0} flagged={s?.flagged.length ?? 0} threads={threads}
+        booked={events.length > 0 || threads.some((t) => t.status === "booked")} searching={searching}
+        now={nowNext.now} next={nowNext.next} stage={s?.autopilot?.stage} blocked={stats.blocked} minutes={stats.minutes} />
       <main className="grid" data-m={mobile}>
         <section className="col col-chat">
           <div className="panel chat">
-            <div className="ph"><span className="avatar lg"><Bot size={26} /></span><div><h2>Your agent</h2><small><span className="live-dot" />{busy ? "working…" : "online, speaks Spanish and English"}</small></div></div>
+            <div className="ph"><span className="avatar lg"><Bot size={26} /></span><div><h2>Talk to your agent</h2><small>{busy ? <><span className="live-dot" />Working…</> : "Spanish or English, voice or text"}</small></div></div>
             <div className="scroll chat-scroll">
               {chat.length === 0 && <>
                 <div className="chatline"><span className="avatar"><Bot size={20} /></span><div className="msg assistant">¡Hola Nicolás! Contame qué buscás y yo me encargo: busco, filtro scams, hablo con los dueños y te agendo la visita.</div></div>
                 <div className="chips-col">{CHIPS.map((c) => <button key={c} className="suggest" onClick={() => void send(c)}>{c}</button>)}</div>
               </>}
               {chat.map((c, i) => <div key={i} className={`chatline ${c.role}`}>{c.role !== "user" && <span className="avatar"><Bot size={20} /></span>}<div className={`msg ${c.role}`}>{c.role === "assistant" ? <Rich text={c.text} /> : c.text}</div></div>)}
+              {consent && !typing && <div className="chat-cta">
+                {(consent.options?.length ? consent.options : CONSENT).map((o, k) => <button key={o} className={k === 0 ? "primary sm" : "ghost sm"} onClick={() => void approve(consent.id, true, o)}>{o}</button>)}
+              </div>}
               {typing && <div className="chatline"><span className="avatar"><Bot size={20} /></span><div className="msg assistant typing"><i /><i /><i /></div></div>}
               <div ref={chatEnd} />
             </div>
@@ -292,7 +400,9 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
               <button type="button" className={`mic ${listening ? "on" : ""}`} onClick={mic} title={listening ? "Stop" : "Talk"} aria-label="Talk">
                 {listening ? <span className="bars"><i /><i /><i /><i /></span> : <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" /></svg>}
               </button>
-              <input value={input} onChange={(e) => setInput(e.target.value)} placeholder={listening ? "Listening…" : "Describe it, or paste a Craigslist link"} disabled={busy} />
+              <textarea rows={2} value={input} onChange={(e) => setInput(e.target.value)} aria-label="Message your agent"
+                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send(input); } }}
+                placeholder={listening ? "Listening…" : narrow ? "Describe the place, or paste a Craigslist link" : "Describe the place you want, or paste a Craigslist link"} disabled={busy} />
               <button className="primary send" disabled={busy || !input.trim()} aria-label="Send"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 12h14M13 6l6 6-6 6" stroke="currentColor" strokeWidth="2.2" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
             </form>
             <div className="chat-opts">
@@ -305,19 +415,19 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
 
         <section className="col col-homes">
           <div className="panel homes">
-            {hasResults && <div className="ph homes-ph">
+            <div className="ph ph-title"><div><h2>Places found</h2><small>Ranked by fit, every one scored for scams</small></div></div>
+            {hasResults && <div className="homes-bar">
               <div className="seg">
-                <button className={tab === "ranked" ? "on" : ""} onClick={() => setTab("ranked")}>Best matches <span>{s?.results.length ?? 0}</span></button>
-                <button className={`${tab === "flagged" ? "on" : ""} red`} onClick={() => setTab("flagged")}>Scams caught <span>{s?.flagged.length ?? 0}</span></button>
+                <button className={tab === "ranked" ? "on" : ""} onClick={() => setTab("ranked")}>{narrow ? "Matches" : "Best matches"} <span>{s?.results.length ?? 0}</span></button>
+                <button className={`${tab === "flagged" ? "on" : ""} red`} onClick={() => setTab("flagged")}>{narrow ? "Scams" : "Scams caught"} <span>{s?.flagged.length ?? 0}</span></button>
               </div>
-              {s?.searchReport && <span className="scanned">{s.searchReport.total} scanned live</span>}
               <span className="grow" />
               <div className="seg sm">
                 <button className={view === "list" ? "on" : ""} onClick={() => setView("list")}>List</button>
                 <button className={view === "map" ? "on" : ""} onClick={() => setView("map")}>Map</button>
               </div>
             </div>}
-            {searching && !hasResults ? <Scanning /> : !hasResults ? <Hero onTry={(t) => void send(t)} /> : view === "map" ? (
+            {searching && !hasResults ? <Scanning /> : !hasResults ? <FirstRun /> : view === "map" ? (
               <div className="map-wrap">
                 <MapView listings={mapListings} near={s?.criteria?.near ?? []} hovered={hovered} />
                 <div className="map-legend"><span><i className="g" />Looks safe</span><span><i className="y" />Caution</span><span><i className="r" />Likely scam</span></div>
@@ -326,56 +436,35 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
               <div className="scroll listings">
                 {searching && <div className="refreshing"><span className="spin" />Searching again…</div>}
                 {list.map((l, i) => <ListingCard key={l.id} l={l} i={tab === "ranked" ? i : undefined} onContact={tab === "ranked" ? (id) => void contact(id) : undefined} pinned={l.id === s?.analyzedId} onHover={setHovered} onXray={setXray} />)}
-                {!list.length && <div className="empty">{tab === "ranked" ? "Nothing safe matched. Try a bigger budget." : "No scams caught in this search."}</div>}
+                {!list.length && <div className="empty">{tab === "ranked" ? "Nothing safe matched. Try a bigger budget." : "No scams in this search. Good sign."}</div>}
               </div>
             )}
           </div>
         </section>
 
         <section className="col col-inbox">
-          {(pending.length > 0 || (s?.events.length ?? 0) > 0) && <div className="panel needs">
-            {pending.length > 0 && <div className="ph"><h2>Needs your OK</h2><span className="badge">{pending.length}</span></div>}
+          <div className="panel side">
+            <div className="ph"><div><h2>Deals in progress</h2><small>Each landlord your agent is talking to, as you</small></div>
+              <span className="grow" />{pending.length > 0 && <span className="badge" title="Needs you">{pending.length}</span>}</div>
+            {demo && threads.length > 0 && <div className="sim">
+              <span>Simulate landlord</span>
+              {["hello", "video", "slot", "scam"].map((p) => <button key={p} className="ghost xs" onClick={() => void landlord(p)}>{p}</button>)}</div>}
             <div className="scroll">
-              {pending.map((a) => (
-                <div key={a.id} className="ap">
-                  <div className="ap-t">{a.title}</div>
-                  {a.body && <pre>{a.body}</pre>}
-                  {a.kind === "open_craigslist_reply" && <div className="note">We never auto-contact Craigslist. Approving copies the text and opens the listing; you click Reply.</div>}
-                  <div className="ap-actions">
-                    {a.kind === "decision" ? (a.options ?? ["Yes", "No"]).map((o) => <button key={o} onClick={() => void approve(a.id, true, o)}>{o}</button>) : <>
-                      <button className="primary" onClick={() => { if (a.kind === "open_craigslist_reply") void navigator.clipboard?.writeText(a.body); void approve(a.id, true); }}>{a.kind === "send_contact" ? "Approve & send" : "Approve"}</button>
-                      <button className="ghost" onClick={() => void approve(a.id, false)}>Not now</button></>}
-                  </div>
-                </div>))}
-              {s?.events.map((e) => {
+              {pending.map((a) => <NeedCard key={a.id} a={a} listing={mapListings.find((l) => l.id === a.listingId)} onApprove={(ok, ans) => void approve(a.id, ok, ans)} onPaste={() => openAndPaste(a)} />)}
+              {events.map((e) => {
                 const d = new Date(e.start);
                 return <div key={e.id} className="ticket-card">
                   <div className="cal sm"><span>{d.toLocaleString("en-US", { timeZone: LA, month: "short" })}</span><b>{d.toLocaleString("en-US", { timeZone: LA, day: "numeric" })}</b></div>
-                  <div><div className="tk">Viewing booked</div><div className="tw">{fmtLong(e.start)}</div><div className="tt">{e.title.replace(/^Viewing: /, "").replace(/^\[DEMO DATA\]\s*/, "")}</div>
+                  <div><div className="tk">Viewing booked</div><div className="tw">{fmtLong(e.start)}</div><div className="tt">{clean(e.title)}</div>
                     <div className="tn">Pay nothing before you see it.</div>
                     <div className="tk-actions">{e.link ? <a href={e.link} target="_blank" rel="noreferrer">Open in Google Calendar</a> : <a href={gcalLink(e)} target="_blank" rel="noreferrer">Add to Google Calendar</a>}
                       <a href={icsHref(e)} download="viewing.ics">Download .ics</a></div></div>
                 </div>;
               })}
-            </div>
-          </div>}
-          <div className="panel side">
-            <div className="ph">
-              <div className="seg">
-                <button className={side === "inbox" ? "on" : ""} onClick={() => setSide("inbox")}>Landlords <span>{threads.length}</span></button>
-                <button className={side === "activity" ? "on" : ""} onClick={() => setSide("activity")}>Activity <span>{s?.timeline.length ?? 0}</span></button>
-              </div>
-              <span className="grow" />
-              {side === "activity" && <span className="live-dot" />}
-            </div>
-            {m?.mail === "mock" && side === "inbox" && threads.length > 0 && <div className="sim">
-              <span>Simulate landlord:</span>
-              {["hello", "video", "slot", "scam"].map((p) => <button key={p} className="ghost xs" onClick={() => void landlord(p)}>{p}</button>)}</div>}
-            <div className="scroll">
-              {side === "inbox" ? <Inbox threads={threads} inbox={m?.agentInbox} listings={mapListings} /> : <>
-                {s?.timeline.map((t) => <div key={t.id} className={`tl ${t.kind}`}><span className="ic">{ICON[t.kind] ?? "·"}</span><div><div className="txt">{t.text}</div><div className="when">{fmt(t.at)}</div></div></div>)}
-                {!s?.timeline.length && <div className="empty"><b>Quiet for now</b>Every search, email and booking your agent makes streams here live.</div>}
-              </>}
+              <Inbox threads={threads} listings={mapListings} />
+              {dealsEmpty && <div className="empty deals-empty">
+                <svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true"><path d="M4 6.5h16v11H4z M4 7l8 6 8-6" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" /></svg>
+                <b>No deals yet</b>When your agent emails a landlord, the conversation, the price and the safety checks show up here.</div>}
             </div>
           </div>
         </section>
@@ -383,10 +472,45 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
 
       <nav className="mnav" aria-label="Sections">
         <button className={mobile === "chat" ? "on" : ""} onClick={() => setMobile("chat")}>Agent</button>
-        <button className={mobile === "homes" ? "on" : ""} onClick={() => setMobile("homes")}>Homes{hasResults && <span>{s?.results.length}</span>}</button>
-        <button className={mobile === "inbox" ? "on" : ""} onClick={() => setMobile("inbox")}>Inbox{pending.length + threads.length > 0 && <span>{pending.length || threads.length}</span>}</button>
+        <button className={mobile === "homes" ? "on" : ""} onClick={() => setMobile("homes")}>Places{hasResults && <span>{s?.results.length}</span>}</button>
+        <button className={mobile === "inbox" ? "on" : ""} onClick={() => setMobile("inbox")} aria-label={pending.length ? `Deals, ${pending.length} need you` : "Deals"}>
+          Deals{pending.length > 0 ? <span className="hot">{pending.length}</span> : threads.length > 0 && <span>{threads.length}</span>}</button>
       </nav>
     </>
+  );
+}
+
+function needCopy(a: Approval): { title: string; body?: string; draft?: string } {
+  switch (kindOf(a)) {
+    case "autopilot_consent": return { title: "Let me handle it end to end?", body: "I'll email safe landlords as you, negotiate under your budget, refuse any money before a viewing and book the first slot that fits." };
+    case "open_craigslist_reply": return { title: "Click Reply on Craigslist", body: "I wrote the message and copied it. Craigslist only lets a human click Reply.", draft: a.body };
+    case "send_contact": return { title: "OK to email this landlord as you?", draft: a.body };
+    case "book_viewing": return { title: "Book this viewing?", body: a.body };
+    default: return { title: a.title, body: a.body || undefined };
+  }
+}
+
+function NeedCard({ a, listing, onApprove, onPaste }: { a: Approval; listing?: RankedListing; onApprove: (ok: boolean, answer?: string) => void; onPaste: () => void }) {
+  const k = kindOf(a);
+  const c = needCopy(a);
+  const [open, setOpen] = useState(false);
+  return (
+    <div className={`ap need k-${k}`}>
+      <div className="ap-who"><span className="avatar sm"><Bot size={16} /></span>Your agent needs you{listing && <em>{short(listing.title, 44)}</em>}</div>
+      <div className="ap-t">{c.title}</div>
+      {c.body && <p className="ap-b">{c.body}</p>}
+      {c.draft && <>
+        <pre className={open ? "" : "clamp"}>{c.draft}</pre>
+        <button className="th-more" onClick={() => setOpen(!open)}>{open ? "Show less" : "Read the full message"}</button>
+      </>}
+      <div className="ap-actions">
+        {k === "autopilot_consent" ? (a.options?.length ? a.options : CONSENT).map((o, i) => <button key={o} className={i === 0 ? "primary sm" : "ghost sm"} onClick={() => onApprove(true, o)}>{o}</button>)
+          : k === "open_craigslist_reply" ? <><button className="primary sm" onClick={onPaste}>Open listing & paste</button><button className="ghost sm" onClick={() => onApprove(false)}>Skip this one</button></>
+          : k === "decision" ? (a.options ?? ["Yes", "No"]).map((o, i) => <button key={o} className={i === 0 ? "primary sm" : "ghost sm"} onClick={() => onApprove(true, o)}>{o}</button>)
+          : <><button className="primary sm" onClick={() => onApprove(true)}>{k === "send_contact" ? "Approve & send" : k === "book_viewing" ? "Book it" : "Approve"}</button>
+            <button className="ghost sm" onClick={() => onApprove(false)}>Not now</button></>}
+      </div>
+    </div>
   );
 }
 
@@ -405,6 +529,6 @@ function icsHref(e: { id: string; title: string; start: string; end?: string }) 
 
 function bookedMoment(title: string, startIso: string): MomentData {
   const d = new Date(startIso);
-  return { kind: "booked", title: title.replace(/^\[DEMO DATA\]\s*/, ""), when: fmtLong(startIso),
-    day: d.toLocaleString("en-US", { timeZone: LA, day: "numeric" }), month: d.toLocaleString("en-US", { timeZone: LA, month: "short" }).toUpperCase() };
+  return { kind: "booked", title: clean(title), when: fmtLong(startIso),
+    day: d.toLocaleString("en-US", { timeZone: LA, day: "numeric" }), month: d.toLocaleString("en-US", { timeZone: LA, month: "short" }) };
 }
