@@ -836,3 +836,23 @@ input[type="checkbox"] { width: auto; accent-color: var(--accent); box-shadow: n
 .side .ph .saved-pill { flex: none; white-space: nowrap; }
 @media (max-width: 1000px) { .side .ph { flex-wrap: wrap; row-gap: 8px; } .side .ph > div:first-child { flex-basis: 100%; } .side-sub { max-width: none; } }
 .side .ph { flex-wrap: wrap; row-gap: 8px; } .side .ph > div:first-child { flex-basis: 100%; } .side-sub { max-width: none; }
+
+/* ── mission compact (desktop) ── */
+@media (min-width: 1001px) {
+  :root { --mission-h: 84px; }
+  .mission { gap: 8px; padding: 12px 20px 0; justify-content: flex-start; }
+  .mission-row { gap: 32px; }
+  .track::before, .track::after { top: 10px; height: 1.5px; }
+  .track li { gap: 4px; }
+  .track i { width: 22px; height: 22px; font-size: 11px; }
+  .track li.now i { box-shadow: inset 0 0 0 2px var(--accent), 0 0 0 3px var(--accent-ring); }
+  .track small { display: none; }
+  .track strong { font-size: 12.5px; font-weight: 600; }
+  .mission-live { height: 22px; padding: 0; gap: 16px; background: none; border: 0; box-shadow: none; border-radius: 0; }
+  .nn.next { display: none; }
+  .nn.now { max-width: none; flex: 1 1 auto; }
+  .nn.now .nn-k { font-weight: 600; }
+  .nn-v { font-weight: 550; color: var(--text); }
+  .mstats { gap: 18px; color: var(--faint); }
+  .mstats span, .mstats .acc { padding: 0; background: none; box-shadow: none; border-radius: 0; }
+}
