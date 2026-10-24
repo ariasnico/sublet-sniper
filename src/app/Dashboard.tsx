@@ -2,6 +2,7 @@
 import { createElement, useCallback, useEffect, useRef, useState } from "react";
 import Script from "next/script";
 import { Toaster, toast } from "sonner";
+import { Bot } from "./Bot";
 import type { RankedListing } from "@/lib/types";
 import type { Approval, ChatMsg, Thread, TimelineItem } from "@/lib/store";
 
@@ -13,6 +14,7 @@ interface SR { lang: string; interimResults: boolean; onresult: ((e: { results: 
 type SRCtor = new () => SR;
 
 const fmt = (iso: string) => new Date(iso).toLocaleString("en-US", { timeZone: "America/Los_Angeles", weekday: "short", hour: "numeric", minute: "2-digit" }) + " PT";
+const ICON: Record<string, string> = { search: "🔎", scam: "🛡️", draft: "✍️", email_out: "📤", email_in: "📩", calendar: "📅", decision: "🤔", flag: "🚩" };
 const SUGGEST = "Busco depto amoblado cerca de Caltrain, menos de $4k, del 1/11 al 15/12";
 
 async function post<T>(url: string, body?: unknown): Promise<T> {
@@ -22,11 +24,11 @@ async function post<T>(url: string, body?: unknown): Promise<T> {
 
 function ListingCard({ l, i, onContact }: { l: RankedListing; i?: number; onContact?: (id: string) => void }) {
   return (
-    <div className="card">
+    <div className={`card ${l.scam.light}`}>
       <div className="t"><span className={`light ${l.scam.light}`} />{i != null ? `#${i + 1} ` : ""}<a href={l.url} target="_blank" rel="noreferrer">{l.title}</a>
         {l.demo && <span className="tag">DEMO DATA</span>}</div>
-      <div className="m">${l.priceMonthly?.toLocaleString("en-US") ?? "?"}/mo · {l.type} · {l.neighborhood ?? l.hood ?? "SF"}{l.distanceKm != null ? ` · ${l.distanceKm.toFixed(1)} km` : ""} · {l.source} · score {l.score}{l.furnished ? " · furnished" : ""}</div>
-      {l.fit.length > 0 && <div className="m">✓ {l.fit.slice(0, 4).join(" · ")}</div>}
+      <div className="m"><span className="price">${l.priceMonthly?.toLocaleString("en-US") ?? "?"}/mo</span> · {l.type} · {l.neighborhood ?? l.hood ?? "SF"}{l.distanceKm != null ? ` · ${l.distanceKm.toFixed(1)} km` : ""} · {l.source} · score {l.score}{l.furnished ? " · furnished" : ""}</div>
+      {l.fit.length > 0 && <div className="m fit">✓ {l.fit.slice(0, 4).join(" · ")}</div>}
       {l.scam.reasons.length > 0 && <ul className="reasons">{l.scam.reasons.slice(0, 4).map((r) => <li key={r}>{r}</li>)}</ul>}
       {onContact && l.scam.light !== "red" && <div className="row" style={{ marginTop: 6 }}><button onClick={() => onContact(l.id)}>Draft contact</button></div>}
     </div>
@@ -115,9 +117,9 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
   return (
     <>
       {elevenLabsAgentId && <Script src="https://unpkg.com/@elevenlabs/convai-widget-embed" strategy="afterInteractive" />}
-      <Toaster position="top-right" richColors theme="dark" closeButton />
+      <Toaster position="top-right" richColors theme="light" closeButton />
       <div className="top">
-        <h1>🎯 Sublet Sniper</h1>
+        <div className="brand"><Bot size={34} className="bot-wave" /><h1>Sublet Sniper<small>your personal rental agent</small></h1></div>
         {m && <>
           <span className={`pill ${m.llm !== "mock" ? "live" : ""}`}>LLM: {m.llm}</span>
           <span className={`pill ${m.craigslist === "live" ? "live" : ""}`}>Craigslist: {m.craigslist}</span>
@@ -132,11 +134,12 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
       <div className="grid">
         <div className="col">
           <div className="panel" style={{ flex: 1 }}>
-            <h2>Agent</h2>
+            <h2><Bot size={20} />Agent</h2>
             <div className="scroll">
-              {(s?.chat ?? []).length === 0 && <div className="m" style={{ color: "var(--mute)" }}>Try: <a href="#" onClick={(e) => { e.preventDefault(); void send(SUGGEST); }}>{SUGGEST}</a></div>}
-              {s?.chat.map((c, i) => <div key={i} className={`msg ${c.role}`}>{c.text}</div>)}
-              {busy && <div className="msg assistant typing"><i /><i /><i /></div>}
+              {(s?.chat ?? []).length === 0 && <div className="chatline"><span className="avatar"><Bot size={20} /></span><div className="msg assistant">Hola Nicolás! Tell me what you&apos;re looking for. Try:</div></div>}
+              {(s?.chat ?? []).length === 0 && <button className="suggest" onClick={() => void send(SUGGEST)}>“{SUGGEST}”</button>}
+              {s?.chat.map((c, i) => <div key={i} className={`chatline ${c.role}`}>{c.role !== "user" && <span className="avatar"><Bot size={20} /></span>}<div className={`msg ${c.role}`}>{c.text}</div></div>)}
+              {busy && <div className="chatline"><span className="avatar"><Bot size={20} /></span><div className="msg assistant typing"><i /><i /><i /></div></div>}
               <div ref={chatEnd} />
             </div>
             <form className="row" style={{ marginTop: 8 }} onSubmit={(e) => { e.preventDefault(); void send(input); }}>
@@ -144,9 +147,9 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
               <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Ask in Spanish or English…" disabled={busy} />
               <button className="primary" disabled={busy}>Send</button>
             </form>
-            <div className="row" style={{ marginTop: 6, fontSize: 12, color: "var(--mute)" }}>
+            <div className="row" style={{ marginTop: 8, fontSize: 12, color: "var(--mute)", justifyContent: "space-between" }}>
               <label><input type="checkbox" style={{ width: "auto" }} checked={speak} onChange={(e) => setSpeak(e.target.checked)} /> speak replies</label>
-              <select value={lang} onChange={(e) => setLang(e.target.value)} style={{ background: "#0f1216", color: "var(--text)", border: "1px solid var(--line)", borderRadius: 6 }}>
+              <select value={lang} onChange={(e) => setLang(e.target.value)}>
                 <option value="es-AR">Español</option><option value="en-US">English</option>
               </select>
             </div>
@@ -154,7 +157,8 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
           </div>
           <div className="panel" style={{ maxHeight: "34%" }}>
             <h2><span className="live-dot" />Live activity</h2>
-            <div className="scroll">{s?.timeline.map((t) => <div key={t.id} className={`tl ${t.kind}`}><span className="k">{t.kind}</span>{t.text}<div className="m" style={{ color: "var(--mute)" }}>{fmt(t.at)}</div></div>)}</div>
+            <div className="scroll">{s?.timeline.map((t) => <div key={t.id} className={`tl ${t.kind}`}><span className="ic">{ICON[t.kind] ?? <Bot size={16} />}</span><div><div className="txt">{t.text}</div><div className="when">{fmt(t.at)}</div></div></div>)}
+              {!s?.timeline.length && <div className="empty">Agent actions will stream here live.</div>}</div>
           </div>
         </div>
         <div className="col">
@@ -166,43 +170,43 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
             </div>
             <div className="scroll">
               {tab === "ranked" ? s?.results.map((l, i) => <ListingCard key={l.id} l={l} i={i} onContact={contact} />) : s?.flagged.map((l) => <ListingCard key={l.id} l={l} />)}
-              {s && !s.results.length && <div style={{ color: "var(--mute)" }}>No search yet. Talk to the agent.</div>}
+              {s && !s.results.length && <div className="empty">No search yet. Talk to the agent.</div>}
             </div>
           </div>
         </div>
         <div className="col">
           <div className="panel" style={{ maxHeight: "45%" }}>
-            <h2>Approvals ({pending.length})</h2>
+            <h2>Needs you <span className="count">{pending.length}</span></h2>
             <div className="scroll">
               {pending.map((a) => (
                 <div key={a.id} className="ap">
                   <div className="t" style={{ fontWeight: 600 }}>{a.title}</div>
                   {a.body && <pre>{a.body}</pre>}
-                  {a.kind === "open_craigslist_reply" && <div className="m" style={{ fontSize: 12, color: "var(--mute)" }}>We never auto-contact Craigslist. Approving copies the text and opens the listing; you click Reply.</div>}
+                  {a.kind === "open_craigslist_reply" && <div className="note">We never auto-contact Craigslist. Approving copies the text and opens the listing; you click Reply.</div>}
                   <div className="row" style={{ marginTop: 6, flexWrap: "wrap" }}>
                     {a.kind === "decision" ? (a.options ?? ["Yes", "No"]).map((o) => <button key={o} onClick={() => void approve(a.id, true, o)}>{o}</button>) : <>
                       <button className="primary" onClick={() => { if (a.kind === "open_craigslist_reply") void navigator.clipboard?.writeText(a.body); void approve(a.id, true); }}>Approve</button>
                       <button onClick={() => void approve(a.id, false)}>Reject</button></>}
                   </div>
                 </div>))}
-              {!pending.length && <div style={{ color: "var(--mute)" }}>Nothing needs you right now.</div>}
+              {!pending.length && !s?.events.length && <div className="empty">Nothing needs you right now. ☕</div>}
               {s?.events.map((e) => <div key={e.id} className="card booked"><div className="bk">✅ Viewing booked</div><div className="t">{e.title.replace(/^Viewing: /, "")}</div><div className="when">{fmt(e.start)}</div>{e.link ? <a href={e.link} target="_blank" rel="noreferrer">Open in Google Calendar</a> : <div className="m">On your calendar · pay nothing before seeing it</div>}</div>)}
             </div>
           </div>
           <div className="panel" style={{ flex: 1 }}>
             <h2>Landlord threads</h2>
-            {m?.mail === "mock" && s?.threads.length ? <div className="row" style={{ flexWrap: "wrap", marginBottom: 6, fontSize: 12 }}>
-              <span style={{ color: "var(--mute)" }}>Simulate DEMO landlord:</span>
+            {m?.mail === "mock" && s?.threads.length ? <div className="sim">
+              <span>Simulate DEMO landlord:</span>
               {["hello", "video", "slot", "scam"].map((p) => <button key={p} onClick={() => void landlord(p)}>{p}</button>)}</div> : null}
             <div className="scroll">
               {s?.threads.map((t) => (
                 <div key={t.id} className="card thread">
                   <div className="t">{t.listingTitle} <span className={`pill st-${t.status}`}>{({ awaiting_landlord: "⏳ waiting on landlord", active: "💬 talking", viewing_proposed: "🗓 slots offered", booked: "✅ viewing booked", flagged: "🚩 scam refused" } as Record<string, string>)[t.status] ?? t.status}</span></div>
                   <div className="m">{t.landlordEmail} · agent inbox {m?.agentInbox}</div>
-                  {t.messages.map((x, i) => <div key={i} className={`msg ${x.from === "landlord" ? "lm" : "am"}`}><b>{x.from === "landlord" ? "Landlord" : "Agent"}:</b> {x.text}
+                  {t.messages.map((x, i) => <div key={i} className={`msg ${x.from === "landlord" ? "lm" : "am"}${x.flagged ? " flagged" : ""}`}><span className="who">{x.from === "landlord" ? "Landlord" : "🤖 Agent (as Nicolás)"}</span>{x.text}
                     {x.flagged && <div className="flagnote">🚩 {x.flagged.join(" · ")}</div>}</div>)}
                 </div>))}
-              {!s?.threads.length && <div style={{ color: "var(--mute)" }}>No conversations yet. Approve a contact for the DEMO listing.</div>}
+              {!s?.threads.length && <div className="empty">No conversations yet. Approve a contact for the DEMO listing.</div>}
             </div>
           </div>
         </div>
