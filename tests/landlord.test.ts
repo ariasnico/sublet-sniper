@@ -32,3 +32,22 @@ describe("landlord safety", () => {
     expect(emailAllowed("real.landlord@gmail.com")).toBe(false);
   });
 });
+
+describe("landlord-proposed times", () => {
+  it("accepts 'Video tour Monday after 5pm' inside the window, no fake tour claim", async () => {
+    const { parseWindow } = await import("@/lib/landlord");
+    const now = new Date("2026-10-24T19:00:00Z");
+    const w = parseWindow("Yes it's available! Video tour Monday after 5pm?\n\nOn Sat, Oct 24 Nicolás wrote:\n> Sunday 11am?", now)!;
+    expect(w).toEqual({ day: "2026-10-26", startMin: 17 * 60, endMin: 20 * 60 });
+    const slot = { start: "2026-10-27T00:30:00.000Z", end: "2026-10-27T01:15:00.000Z" };
+    const plan = planReply("Yes it's available! Video tour Monday after 5pm?", thread(), defaultProfile(), slots, slot);
+    expect(plan.intent).toBe("landlord_time");
+    expect(plan.slot).toEqual(slot);
+    expect(plan.text).toMatch(/Mon, Oct 26, 5:30 PM PT works/);
+    expect(plan.text).not.toMatch(/thanks for the tour/i);
+  });
+  it("ignores quoted text when classifying", () => {
+    const plan = planReply("Sounds good\n> please send the deposit via zelle", thread(), defaultProfile(), slots);
+    expect(plan.intent).not.toBe("safety");
+  });
+});

@@ -1,5 +1,5 @@
 import { complete } from "./llm";
-import { fmtLA } from "./time";
+import { fmtLA, laDay } from "./time";
 import type { RenterProfile, Thread } from "./store";
 import type { Slot } from "./calendar";
 
@@ -31,7 +31,7 @@ export function firstContact(p: RenterProfile, title: string, price: number | nu
   };
 }
 
-export type Intent = "safety" | "pick_slot" | "wants_viewing" | "proof_given" | "price" | "question" | "generic";
+export type Intent = "safety" | "pick_slot" | "landlord_time" | "wants_viewing" | "proof_given" | "price" | "question" | "generic";
 
 export function pickSlot(text: string, slots: Slot[] | undefined): Slot | null {
   if (!slots?.length) return null;
@@ -48,9 +48,54 @@ export function pickSlot(text: string, slots: Slot[] | undefined): Slot | null {
   return null;
 }
 
+export interface TimeWindow { day: string; startMin: number; endMin: number }
+
+const DOWS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+const hm = (h: string, m: string | undefined, ap: string | undefined, def: "am" | "pm" = "pm") => {
+  let hh = Number(h) % 12; const a = (ap ?? def).toLowerCase();
+  if (a.startsWith("p")) hh += 12;
+  return hh * 60 + Number(m ?? 0);
+};
+
+/** Strip quoted reply text ("On ... wrote:" and "> " lines) so we only read the landlord's new words. */
+export function stripQuoted(text: string): string {
+  const cut = text.split(/\n\s*On .{0,200}wrote:\s*\n|\n-{2,}\s*Original Message/i)[0];
+  return cut.split("\n").filter((l) => !/^\s*>/.test(l)).join("\n").trim();
+}
+
+/** Parses a landlord-proposed day + time window ("Monday after 5pm", "tomorrow 2-4pm", "Sat at 11am"). LA dates. */
+export function parseWindow(raw: string, now = new Date()): TimeWindow | null {
+  const text = stripQuoted(raw).toLowerCase();
+  const today = laDay(now);
+  const todayDow = new Date(`${today}T12:00:00Z`).getUTCDay();
+  let offset: number | null = null;
+  const dm = text.match(/\b(sun|mon|tues?|wed(?:nes)?|thu(?:rs)?|fri|sat(?:ur)?)(?:day)?\b/);
+  if (/\btomorrow\b/.test(text)) offset = 1;
+  else if (/\b(today|tonight|this evening)\b/.test(text)) offset = 0;
+  else if (dm) { const d = DOWS.indexOf(dm[1].slice(0, 3)); offset = (d - todayDow + 7) % 7 || 7; }
+  if (offset === null) return null;
+  const day = laDay(new Date(Date.parse(`${today}T12:00:00Z`) + offset * 864e5));
+  let startMin = 9 * 60, endMin = 20 * 60;
+  let m: RegExpMatchArray | null;
+  if ((m = text.match(/\b(?:between|from)?\s*(\d{1,2})(?::(\d\d))?\s*(am|pm)?\s*(?:-|to|and|–)\s*(\d{1,2})(?::(\d\d))?\s*(am|pm)\b/))) {
+    startMin = hm(m[1], m[2], m[3] ?? m[6]); endMin = hm(m[4], m[5], m[6]);
+  } else if ((m = text.match(/\b(?:after|from|anytime after|any time after)\s*(\d{1,2})(?::(\d\d))?\s*(am|pm)?/))) {
+    startMin = hm(m[1], m[2], m[3]); endMin = Math.max(startMin + 120, 20 * 60);
+  } else if ((m = text.match(/\bbefore\s*(\d{1,2})(?::(\d\d))?\s*(am|pm)?/))) {
+    endMin = hm(m[1], m[2], m[3]); startMin = Math.min(9 * 60, endMin - 60);
+  } else if ((m = text.match(/\b(?:at|@|around)\s*(\d{1,2})(?::(\d\d))?\s*(am|pm)?/)) || (m = text.match(/\b(\d{1,2})(?::(\d\d))?\s*(am|pm)\b/))) {
+    startMin = hm(m[1], m[2], m[3]); endMin = startMin + 45;
+  } else if (/\bmorning\b/.test(text)) { startMin = 9 * 60; endMin = 12 * 60; }
+  else if (/\bafternoon\b/.test(text)) { startMin = 12 * 60; endMin = 17 * 60; }
+  else if (/\b(evening|tonight|night)\b/.test(text)) { startMin = 17 * 60; endMin = 20 * 60; }
+  return { day, startMin, endMin };
+}
+
 export function classify(text: string, thread: Thread): Intent {
+  text = stripQuoted(text);
   if (detectRedFlags(text).length) return "safety";
   if (thread.offeredSlots?.length && pickSlot(text, thread.offeredSlots.map((s) => JSON.parse(s) as Slot))) return "pick_slot";
+  if (parseWindow(text)) return "landlord_time";
   if (/(video|walkthrough|facetime|tour link|photos? of (the )?(id|lease)|youtube|loom|proof|deed|id attached)/i.test(text)) return "proof_given";
   if (/(when can you|come (see|by)|viewing|showing|visit|stop by)/i.test(text)) return "wants_viewing";
   if (/\$\s?\d|price|rent|firm|negotiable/i.test(text)) return "price";
@@ -66,7 +111,8 @@ function priceIn(text: string): number | null {
 }
 
 /** Deterministic reply planner. Safety rules always run here, even when an LLM writes the wording. */
-export function planReply(text: string, thread: Thread, p: RenterProfile, slots: Slot[]): ReplyPlan {
+export function planReply(text: string, thread: Thread, p: RenterProfile, slots: Slot[], windowSlot: Slot | null = null): ReplyPlan {
+  text = stripQuoted(text);
   const intent = classify(text, thread);
   const flags = detectRedFlags(text);
   const slotList = slots.map((s, i) => `${i + 1}) ${fmtLA(s.start)}`).join("\n");
@@ -80,10 +126,18 @@ export function planReply(text: string, thread: Thread, p: RenterProfile, slots:
       return { intent, flags, proposeSlots: false, slot, askedProof: thread.askedProof, text:
         `Great, ${slot ? fmtLA(slot.start) : "that time"} works. I'm confirming it on my calendar now. Please send the exact address and unit number, and your full name so I know who to ask for.${sign}` };
     }
+    case "landlord_time": {
+      const video = /\b(video|facetime|zoom|call)\b/i.test(text);
+      if (windowSlot) return { intent, flags, proposeSlots: false, slot: windowSlot, askedProof: true, text:
+        `${/available/i.test(text) ? "Great to hear it's available! " : ""}${fmtLA(windowSlot.start)} works for me${video ? " for the video tour" : ""}. I've put it on my calendar. ` +
+        `${video ? "Please send the call link (FaceTime/Zoom is fine) and" : "Please send"} the exact address and unit, and your full name.${sign}` };
+      return { intent, flags, proposeSlots: true, slot: null, askedProof: thread.askedProof, text:
+        `Thanks! Unfortunately that time is booked for me. Could any of these work instead (Pacific time)?\n${slotList}${sign}` };
+    }
     case "proof_given":
     case "wants_viewing":
       return { intent, flags, proposeSlots: true, slot: null, askedProof: thread.askedProof, text:
-        `${intent === "proof_given" ? "Thanks for the tour, looks great." : "Happy to come see it."} I can do any of these (Pacific time):\n${slotList}\nWhich one works for you?${sign}` };
+        `${intent === "proof_given" ? "Thanks, that helps." : "Happy to come see it."} I can do any of these (Pacific time):\n${slotList}\nWhich one works for you?${sign}` };
     case "price": {
       const asked = priceIn(text);
       const counter = asked && asked > p.maxBudget ? p.maxBudget : asked && asked > 0 ? Math.round((asked * 0.95) / 50) * 50 : null;
@@ -105,7 +159,7 @@ export function planReply(text: string, thread: Thread, p: RenterProfile, slots:
 
 /** Optionally rewrites the planned reply with the LLM, keeping its decisions. Safety replies are never rewritten. */
 export async function writeReply(plan: ReplyPlan, landlordText: string, p: RenterProfile): Promise<string> {
-  if (plan.intent === "safety" || plan.intent === "pick_slot" || plan.proposeSlots) return plan.text;
+  if (plan.intent === "safety" || plan.intent === "pick_slot" || plan.intent === "landlord_time" || plan.proposeSlots) return plan.text;
   const out = await complete(
     `You write short, warm, plain emails from a renter (${p.name}) to a sublet landlord. Keep every fact and decision from the DRAFT (budget cap $${p.maxBudget}/mo, the request for a live video walkthrough/proof). Never agree to pay anything before an in-person or live-video viewing and a written sublease. Answer the landlord's questions from this profile only: ${JSON.stringify(p)}. Output only the email body.`,
     `LANDLORD SAID:\n${landlordText}\n\nDRAFT:\n${plan.text}`).catch(() => null);

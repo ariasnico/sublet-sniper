@@ -46,3 +46,17 @@ export async function bookViewing(slot: Slot, title: string, description: string
   if (!j.id) throw new Error("Calendar insert failed");
   return { mode: "google", id: j.id, link: j.htmlLink };
 }
+
+/** First free 45-min slot inside a landlord-proposed window (prefers :30 after a "after X" start). */
+export async function slotInWindow(w: { day: string; startMin: number; endMin: number }): Promise<Slot | null> {
+  const cands: Slot[] = [];
+  for (let m = w.startMin === w.endMin - 45 ? w.startMin : w.startMin + 30; m + 45 <= Math.max(w.endMin, w.startMin + 45); m += 30) {
+    const start = laInstant(w.day, Math.floor(m / 60), m % 60);
+    if (Date.parse(start) < Date.now() + 3600e3) continue;
+    cands.push({ start, end: new Date(Date.parse(start) + 45 * 60000).toISOString() });
+  }
+  if (!cands.length) return null;
+  let blocks: Slot[] = [];
+  try { blocks = await busy(cands[0].start, cands[cands.length - 1].end); } catch { blocks = []; }
+  return cands.find((c) => !blocks.some((b) => Date.parse(b.start) < Date.parse(c.end) && Date.parse(b.end) > Date.parse(c.start))) ?? null;
+}

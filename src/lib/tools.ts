@@ -2,10 +2,10 @@ import { parseCriteria } from "./criteria";
 import { searchListings } from "./search";
 import { llmNormalize } from "./llm-normalize";
 import { llmProvider } from "./config";
-import { proposeSlots, bookViewing, type Slot } from "./calendar";
+import { proposeSlots, bookViewing, slotInWindow, type Slot } from "./calendar";
 import { sendMail } from "./mail";
 import { syncThreads } from "./mailsync";
-import { emailAllowed, firstContact, planReply, writeReply, detectRedFlags } from "./landlord";
+import { emailAllowed, firstContact, parseWindow, planReply, writeReply, detectRedFlags } from "./landlord";
 import { fmtLA } from "./time";
 import { findListing, log, now, state, uid, type Approval, type Thread } from "./store";
 import { PLACES } from "./geo";
@@ -222,7 +222,9 @@ export async function handleInbound(m: { from: string; text: string; messageId?:
   if (!emailAllowed(t.landlordEmail)) { toolAsk({ question: `New reply on "${t.listingTitle}". Want me to answer?`, options: ["Yes", "No"] }); return { ok: true, autoReply: false }; }
 
   const slots = await proposeSlots(3);
-  const plan = planReply(m.text, t, s.profile, slots);
+  const win = parseWindow(m.text);
+  const windowSlot = win ? await slotInWindow(win) : null;
+  const plan = planReply(m.text, t, s.profile, slots, windowSlot);
   const text = await writeReply(plan, m.text, s.profile);
   if (plan.intent === "safety") {
     t.status = "flagged";
@@ -233,7 +235,7 @@ export async function handleInbound(m: { from: string; text: string; messageId?:
   } else if (plan.proposeSlots) {
     t.offeredSlots = slots.map((x) => JSON.stringify(x)); t.status = "viewing_proposed";
     log("calendar", `Offered ${slots.length} viewing slots from your calendar`);
-  } else if (plan.intent === "pick_slot" && plan.slot) {
+  } else if ((plan.intent === "pick_slot" || plan.intent === "landlord_time") && plan.slot) {
     requestBooking(t, plan.slot);
   } else t.status = "active";
   t.askedProof = plan.askedProof;
