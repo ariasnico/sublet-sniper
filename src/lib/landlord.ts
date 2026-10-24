@@ -3,17 +3,17 @@ import { fmtLA, laDay } from "./time";
 import type { RenterProfile, Thread } from "./store";
 import type { Slot } from "./calendar";
 
-export const RED_FLAGS: { re: RegExp; label: string; es: string }[] = [
-  { re: /\b(out of (the )?(country|town|state)|overseas|abroad|missionary|deployed|fuera del pa[ií]s)\b/i, label: "Landlord says they are out of the country", es: "dice que está fuera del país" },
-  { re: /\bzelle\b/i, label: "Asks for Zelle (no buyer protection)", es: "pidió pago por Zelle" },
-  { re: /\b(wire|wiring|western union|moneygram|bank transfer)\b/i, label: "Asks for a wire / money transfer", es: "pidió una transferencia" },
-  { re: /\b(gift ?cards?|bitcoin|crypto|usdt|cash ?app|venmo)\b/i, label: "Asks for gift cards / crypto / P2P app", es: "pidió gift cards, cripto o apps de pago" },
-  { re: /\b(deposit|first (and|&) last|holding fee|reserve|application fee)\b.{0,80}\b(before|prior|to hold|now|today|first|asap|secure)\b|\b(before|prior to)\b.{0,40}\b(viewing|showing|seeing|tour)\b.{0,60}\b(deposit|pay|send)\b/i, label: "Wants money before an in-person viewing", es: "quiere plata antes de la visita" },
-  { re: /\b(keys? (will be )?(mailed|shipped|sent)|airbnb (will|to) (hold|handle)|courier)\b/i, label: "Keys by mail / third-party escrow story", es: "promete mandar las llaves por correo" },
+export const RED_FLAGS: { re: RegExp; label: string; short: string }[] = [
+  { re: /\b(out of (the )?(country|town|state)|overseas|abroad|missionary|deployed|fuera del pa[ií]s)\b/i, label: "Landlord says they are out of the country", short: "Says they're out of the country" },
+  { re: /\bzelle\b/i, label: "Asks for Zelle (no buyer protection)", short: "Asked for Zelle" },
+  { re: /\b(wire|wiring|western union|moneygram|bank transfer)\b/i, label: "Asks for a wire / money transfer", short: "Asked for a wire" },
+  { re: /\b(gift ?cards?|bitcoin|crypto|usdt|cash ?app|venmo)\b/i, label: "Asks for gift cards / crypto / P2P app", short: "Asked for gift cards or crypto" },
+  { re: /\b(deposit|first (and|&) last|holding fee|reserve|application fee)\b.{0,80}\b(before|prior|to hold|now|today|first|asap|secure)\b|\b(before|prior to)\b.{0,40}\b(viewing|showing|seeing|tour)\b.{0,60}\b(deposit|pay|send)\b/i, label: "Wants money before an in-person viewing", short: "Wants money before a viewing" },
+  { re: /\b(keys? (will be )?(mailed|shipped|sent)|airbnb (will|to) (hold|handle)|courier)\b/i, label: "Keys by mail / third-party escrow story", short: "Offers keys by mail" },
 ];
 
-/** Spanish wording of a red-flag label (for the user-facing narration). */
-export const flagEs = (label: string) => RED_FLAGS.find((f) => f.label === label)?.es ?? label;
+/** Short wording of a red-flag label (for the chat narration). */
+export const flagShort = (label: string) => RED_FLAGS.find((f) => f.label === label)?.short ?? label;
 
 export function detectRedFlags(text: string): string[] {
   return RED_FLAGS.filter((f) => f.re.test(text)).map((f) => f.label);

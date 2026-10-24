@@ -51,9 +51,9 @@ const fmtLong = (iso: string) => new Date(iso).toLocaleString("en-US", { timeZon
 const clean = (t: string) => t.replace(/^Viewing: /, "").replace(/^\[DEMO DATA\]\s*/, "");
 const short = (t: string, n = 38) => { const c = clean(t); return c.length > n ? `${c.slice(0, n - 1).trimEnd()}…` : c; };
 const GREETING = "Hi Nicolás! Tell me what you need and I'll handle the rest.";
-const SCAN_STEPS = ["Scanning Craigslist sublets, rooms and apartments", "Normalizing prices to monthly", "Comparing every price to SF medians", "Checking photos for reuse across listings", "Looking for wire, Zelle and out-of-country red flags", "Ranking by fit, distance and dates"];
+const SCAN_STEPS = ["Scanning Craigslist", "Normalizing prices", "Comparing to SF medians", "Checking reused photos", "Checking payment red flags", "Ranking"];
 const CONSENT = ["Yes, go", "I'll approve each step"];
-const AP_TIP = "On: your agent emails safe landlords, negotiates and books. You only click Reply on real Craigslist listings.";
+const AP_TIP = "Emails, negotiates and books for you.";
 const kindOf = (a: Approval) => a.kind as string;
 
 /** Time of the last Reset in this browser; servers drop sessions older than it (see ensureEpoch). */
@@ -80,26 +80,26 @@ function FirstRun() {
   return (
     <div className="first">
       <div className="first-bot"><Bot size={104} /></div>
-      <h3>Nothing here yet</h3>
-      <p>Describe what you need on the left. Your agent searches Craigslist live, scores every listing for scams and ranks the safe ones here.</p>
+      <h3>No places yet</h3>
     </div>
   );
 }
 
 /** What the agent is doing right now and what it will do next, read from the state itself (used until the backend reports it). */
 function deriveNowNext(s: S | null, threads: Thread[], pending: Approval[], busy: boolean, autopilot: boolean): { now: string; next: string } {
-  if (!s) return { now: "Getting ready", next: "Listen for what you need" };
+  // Both lines stay at 8 words or fewer; counts live in the mission stats.
+  if (!s) return { now: "Getting ready", next: "Tell me what you need" };
   const safe = s.results.length, scams = s.flagged.length;
-  const afterSearch = safe ? (autopilot ? "Email the best safe landlord as you" : "Pick a place and let your agent reach out") : "Search again with a bigger budget";
+  const afterSearch = safe ? (autopilot ? "Email the best landlord" : "Pick a place to contact") : "Try a bigger budget";
   const base = ((): { now: string; next: string } => {
     const p = pending[0];
     if (p) {
       const k = kindOf(p);
-      if (k === "autopilot_consent") return { now: "Waiting for your OK to run on autopilot", next: "Email the best safe landlord as you" };
-      if (k === "open_craigslist_reply") return { now: "Waiting for you to click Reply on Craigslist", next: "Read the landlord's answer and negotiate" };
-      if (k === "send_contact") return { now: "Waiting for your OK to email the landlord", next: "Ask for a live video tour and leaseholder proof" };
-      if (k === "book_viewing") return { now: `Waiting for your OK to book ${p.body.split(" with ")[0] || "the viewing"}`, next: "Put the viewing on your calendar" };
-      return { now: `Waiting for your answer: ${p.title}`, next: "Keep the deal moving" };
+      if (k === "autopilot_consent") return { now: "Waiting for your OK", next: "Email the best landlord" };
+      if (k === "open_craigslist_reply") return { now: "Waiting for your Craigslist reply", next: "Negotiate when they answer" };
+      if (k === "send_contact") return { now: "Waiting for your OK to email", next: "Ask for a video tour" };
+      if (k === "book_viewing") return { now: "Waiting for your OK to book", next: "Add it to your calendar" };
+      return { now: "Waiting for your answer", next: "Keep the deal moving" };
     }
     const ordered = [...threads].sort((a, b) => (b.messages.at(-1)?.at ?? "").localeCompare(a.messages.at(-1)?.at ?? ""));
     const t = ordered.find((x) => x.status === "booked") ?? ordered[0];
@@ -107,21 +107,21 @@ function deriveNowNext(s: S | null, threads: Thread[], pending: Approval[], busy
       const last = t.messages.at(-1);
       if (t.status === "booked") {
         const ev = s.events.find((e) => e.title.includes(t.listingTitle)) ?? s.events[0];
-        return { now: ev ? `Viewing booked for ${fmt(ev.start)}` : "Viewing booked with the landlord", next: "Go see it, and pay nothing before you do" };
+        return { now: ev ? `Viewing booked: ${fmt(ev.start)}` : "Viewing booked", next: "Pay nothing before you see it" };
       }
-      if (t.status === "flagged") return { now: "Refused a request for money before any viewing", next: safe > 1 ? "Move on to the next safe listing" : "Search again for safer options" };
-      if (t.status === "viewing_proposed") return { now: "Offered the landlord viewing slots", next: "Book the slot the landlord picks" };
-      if (last?.from === "landlord") return { now: "Reading the landlord's reply", next: "Counter under your budget and ask for a viewing" };
+      if (t.status === "flagged") return { now: "Refused money before a viewing", next: safe > 1 ? "Try the next safe listing" : "Search again" };
+      if (t.status === "viewing_proposed") return { now: "Sent viewing times", next: "Book the one they pick" };
+      if (last?.from === "landlord") return { now: "Reading the reply", next: "Counter and ask for a viewing" };
       if (t.status === "active") {
         const d = deal(t);
-        return { now: d?.offered ? `Countered at $${d.offered.toLocaleString("en-US")}, waiting on the landlord` : "Talking with the landlord", next: "Book the first slot that fits" };
+        return { now: d?.offered ? `Countered $${d.offered.toLocaleString("en-US")}, waiting` : "Talking with the landlord", next: "Book the first free slot" };
       }
-      return { now: "Emailed the landlord, waiting for a reply", next: "Negotiate the price once they reply" };
+      return { now: "Emailed the landlord, waiting", next: "Negotiate when they reply" };
     }
-    if (s.searchReport || safe || scams) return { now: `Ranked ${safe} safe place${safe === 1 ? "" : "s"}, blocked ${scams} scam${scams === 1 ? "" : "s"}`, next: afterSearch };
-    return { now: "Waiting for your request", next: "Search Craigslist live and score every listing" };
+    if (s.searchReport || safe || scams) return { now: `${safe} safe place${safe === 1 ? "" : "s"} ranked`, next: afterSearch };
+    return { now: "Waiting for your request", next: "Search and score every listing" };
   })();
-  return busy ? { now: "Thinking it through…", next: base.next } : base;
+  return busy ? { now: "Thinking…", next: base.next } : base;
 }
 
 export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: string | null }) {
@@ -200,7 +200,7 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
       t.messages.forEach((x, i) => {
         if (!x.flagged) return;
         const asked = Math.max(0, ...[...x.text.replace(/,/g, "").matchAll(/\$\s?(\d{3,6})(?!\d)/g)].map((m) => Number(m[1])));
-        keys.push([`flag:${t.id}:${i}`, () => ({ kind: "scam", title: clean(t.listingTitle), detail: `Landlord asked for: ${x.flagged!.join(", ")}`, saved: asked || undefined })]);
+        keys.push([`flag:${t.id}:${i}`, () => ({ kind: "scam", title: clean(t.listingTitle), detail: x.flagged![0].replace(/\s*\(.*\)$/, ""), saved: asked || undefined })]);
       });
       if (t.status === "booked") keys.push([`booked:${t.id}`, () => {
         const ev = s.events.find((e) => e.title.includes(t.listingTitle)) ?? s.events[0];
@@ -208,7 +208,7 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
       }]);
     }
     for (const e of s.events) keys.push([`ev:${e.start}`, () => bookedMoment(clean(e.title), e.start)]); // by start: instances rebuild the same booking under different ids
-    for (const t of s.timeline) if (t.kind === "flag" && /^Refused/.test(t.text)) keys.push([`tl:${t.id}`, () => ({ kind: "scam", title: t.text.replace(/^Refused to contact red listing /, "").replace(/"/g, ""), detail: "Your agent will not contact a listing it scored as a likely scam." })]);
+    for (const t of s.timeline) if (t.kind === "flag" && /^Refused/.test(t.text)) keys.push([`tl:${t.id}`, () => ({ kind: "scam", title: t.text.replace(/^Refused to contact red listing /, "").replace(/"/g, ""), detail: "Won't contact it" })]);
     if (!seen.current) { seen.current = new Set(keys.map(([k]) => k)); return; }
     for (const [k, make] of keys) {
       if (seen.current.has(k)) continue;
@@ -229,6 +229,7 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
       if (!nu.length) continue;
       nu.forEach((id) => seenNeeds.current!.add(id));
       if (n.kind === "craigslist_replies") continue; // optional, never interrupt for it
+      if (n.kind === "autopilot_consent" && !window.matchMedia("(max-width: 1000px)").matches) continue; // already asked in the chat
       fresh = true;
       toast.warning("Your agent needs you", { description: needCopy(n).title });
     }
@@ -251,7 +252,7 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
   // Rehearsal: ?preview=scam or ?preview=booked shows a moment without sending any email.
   useEffect(() => {
     const p = new URLSearchParams(window.location.search).get("preview");
-    if (p === "scam") setMoment({ kind: "scam", title: "Furnished 1BR sublet near Caltrain", detail: "Landlord asked for: Zelle deposit before any viewing", saved: 7200 });
+    if (p === "scam") setMoment({ kind: "scam", title: "Furnished 1BR sublet near Caltrain", detail: "Asks for Zelle", saved: 7200 });
     if (p === "booked") setMoment(bookedMoment("Furnished 1BR sublet near Caltrain", new Date(Date.now() + 2 * 864e5).toISOString()));
   }, []);
 
@@ -300,7 +301,7 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
   const mic = () => {
     const w = window as unknown as { SpeechRecognition?: SRCtor; webkitSpeechRecognition?: SRCtor };
     const C = w.SpeechRecognition ?? w.webkitSpeechRecognition;
-    if (!C) { toast.error("Voice needs Chrome", { description: "Speech recognition isn't supported in this browser. Type instead." }); return; }
+    if (!C) { toast.error("Voice needs Chrome", { description: "Type instead." }); return; }
     if (listening) { recRef.current?.stop(); return; }
     const rec = new C(); rec.lang = lang; rec.interimResults = true;
     let sent = false; setHeard("");
@@ -327,10 +328,10 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
   const openAndPaste = (d: CraigslistDraft) => {
     void navigator.clipboard?.writeText(d.message).catch(() => undefined);
     if (d.url) window.open(d.url, "_blank", "noopener");
-    toast.success("Message copied", { description: "Click Reply on Craigslist and paste it." });
+    toast.success("Message copied", { description: "Click Reply and paste." });
     void approve(d.approvalId, true, undefined, !!d.url);
   };
-  const contact = async (id: string) => { setMobile("chat"); await send(`Contactá el listing ${id}`).catch(() => undefined); };
+  const contact = async (id: string) => { setMobile("chat"); await send(`Contact listing ${id}`).catch(() => undefined); };
   const landlord = async (preset: string) => { const r = await post<{ error?: string }>("/api/demo/landlord", { preset }); if (r.error) toast.error(r.error); void refresh(); };
   const reset = async () => { const at = new Date().toISOString(); localStorage.setItem("sniper-reset-at", at); setResetAt(at); await post("/api/reset"); best.current = null; seen.current = null; seenNeeds.current = null; setView("list"); void refresh(); toast("Fresh start", { description: "Session cleared." }); };
 
@@ -344,10 +345,10 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
       if (!r.ok) throw new Error(String(r.status));
       const j = (await r.json().catch(() => ({}))) as { state?: S };
       adopt(j.state);
-      toast.success(on ? "Autopilot on" : "Autopilot off", { description: on ? "Your agent takes it from here. You only click Reply on real Craigslist listings." : "Your agent will ask before each step." });
+      toast.success(on ? "Autopilot on" : "Autopilot off", { description: on ? "Hands-free from here." : "I'll ask before each step." });
     } catch {
       setApLocal(null);
-      toast.error("Autopilot isn't available yet", { description: "Approve each step from Deals in progress for now." });
+      toast.error("Autopilot isn't available yet", { description: "Approve each step for now." });
     }
   };
 
@@ -368,7 +369,6 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
   const fromBackend = !!ap?.now && !busy && ap.stage !== "paused";
   const nowNext = fromBackend ? { now: ap!.now!, next: ap!.next || derived.next } : derived;
   const stage = fromBackend && ap?.stage ? STAGE_STEP[ap.stage] : undefined;
-  const savedPerMonth = ap?.stats?.savedPerMonth ?? 0;
   const liveModes = m ? [m.llm !== "mock" && "OpenAI", m.craigslist === "live" && "Craigslist", m.mail !== "mock" && "AgentMail", m.calendar !== "mock" && "Calendar"].filter(Boolean) as string[] : [];
   const list = tab === "ranked" ? s?.results ?? [] : s?.flagged ?? [];
   const mapListings = useMemo(() => [...(s?.results ?? []), ...(s?.flagged ?? [])], [s?.results, s?.flagged]);
@@ -385,15 +385,17 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
     void send(f.text ?? f.label);
   };
   const events = s?.events ?? [];
-  const dealsEmpty = !needs.length && !events.length && !threads.length;
+  // On desktop the autopilot consent lives only in the chat (where the conversation is); on a phone the Deals tab keeps its card.
+  const sideNeeds = narrow ? needs : needs.filter((n) => n.kind !== "autopilot_consent");
+  const dealsEmpty = !sideNeeds.length && !events.length && !threads.length;
   // Craigslist drafts are optional (a human must click Reply there); only real decisions count as "needs you".
-  const needCount = needs.filter((x) => x.kind !== "craigslist_replies").reduce((n, x) => n + (x.items?.length ?? 1), 0);
+  const needCount = sideNeeds.filter((x) => x.kind !== "craigslist_replies").reduce((n, x) => n + (x.items?.length ?? 1), 0);
   const listingOf = (approvalId?: string, listingId?: string) => {
     const lid = listingId ?? s?.approvals.find((a) => a.id === approvalId)?.listingId;
     return lid ? mapListings.find((l) => l.id === lid) : undefined;
   };
 
-  const needCards = needs.map((n) => <NeedCard key={n.key} n={n} listingOf={listingOf} onApprove={(id, ok, ans) => void approve(id, ok, ans)} onPaste={openAndPaste} />);
+  const needCards = sideNeeds.map((n) => <NeedCard key={n.key} n={n} listingOf={listingOf} onApprove={(id, ok, ans) => void approve(id, ok, ans)} onPaste={openAndPaste} />);
   return (
     <>
       {elevenLabsAgentId && <Script src="https://unpkg.com/@elevenlabs/convai-widget-embed" strategy="afterInteractive" />}
@@ -401,7 +403,7 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
       <Moment m={moment} onDone={closeMoment} />
       <XRay l={xray ? mapListings.find((x) => x.id === xray) ?? null : null} onClose={closeXray} />
       <header className="top">
-        <Link className="brand" href="/" aria-label="Sublet Sniper home"><Bot size={36} className="bot-wave" /><h1>Sublet Sniper<small>your personal rental agent</small></h1></Link>
+        <Link className="brand" href="/" aria-label="Sublet Sniper home"><Bot size={36} className="bot-wave" /><h1>Sublet Sniper</h1></Link>
         <span className="grow" />
         <div className="tip-wrap">
           <button className={`ap-toggle${apOn ? " on" : ""}`} role="switch" aria-checked={apOn} aria-describedby="ap-tip" onClick={() => void toggleAutopilot()}>
@@ -466,7 +468,7 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
 
         <section className="col col-homes">
           <div className="panel homes">
-            <div className="ph ph-title"><div><h2>Places found</h2><small>Ranked by fit, every one scored for scams</small></div></div>
+            <div className="ph ph-title"><div><h2>Places found</h2></div></div>
             {hasResults && <div className="homes-bar">
               <div className="seg">
                 <button className={tab === "ranked" ? "on" : ""} onClick={() => setTab("ranked")}>{narrow ? "Matches" : "Best matches"} <span>{s?.results.length ?? 0}</span></button>
@@ -487,7 +489,7 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
               <div className="scroll listings">
                 {searching && <div className="refreshing"><span className="spin" />Searching again…</div>}
                 {list.map((l, i) => <ListingCard key={l.id} l={l} i={tab === "ranked" ? i : undefined} onContact={tab === "ranked" ? (id) => void contact(id) : undefined} pinned={l.id === s?.analyzedId} onHover={setHovered} onXray={setXray} />)}
-                {!list.length && <div className="empty">{tab === "ranked" ? "Nothing safe matched. Try a bigger budget." : "No scams in this search. Good sign."}</div>}
+                {!list.length && <div className="empty">{tab === "ranked" ? "No safe matches." : "No scams found."}</div>}
               </div>
             )}
           </div>
@@ -495,9 +497,8 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
 
         <section className="col col-inbox">
           <div className="panel side">
-            <div className="ph"><div><h2>Your agent at work</h2><small className="side-sub">Your agent emails landlords as you, negotiates and books. You don&apos;t need to do anything here unless it asks.</small></div>
+            <div className="ph"><div><h2>Your agent at work</h2></div>
               <span className="grow" />
-              {savedPerMonth > 0 && <span className="saved-pill" title="Negotiated off the asking rent">Saving you ${savedPerMonth.toLocaleString("en-US")}/mo</span>}
               {needCount > 0 && <span className="badge" title="Needs you">{needCount}</span>}</div>
             {demo && threads.length > 0 && <div className="sim">
               <span>Simulate landlord</span>
@@ -505,23 +506,23 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
             <div className="scroll">
               {/* Once a viewing is booked it is the headline; leftover asks go below it.
                   Craigslist hand-offs are a side task: they sit under the live threads so the negotiation stays in view. */}
-              {!events.length && needCards.filter((_, i) => needs[i].kind !== "craigslist_replies")}
+              {!events.length && needCards.filter((_, i) => sideNeeds[i].kind !== "craigslist_replies")}
               {events.map((e) => {
                 const d = new Date(e.start);
                 return <div key={e.id} className="ticket-card hero">
                   <div className="cal sm" aria-hidden="true"><span>{d.toLocaleString("en-US", { timeZone: LA, month: "short" })}</span><b>{d.toLocaleString("en-US", { timeZone: LA, day: "numeric" })}</b></div>
                   <div className="tk-body"><div className="tk"><i aria-hidden="true">✓</i>Viewing booked</div><div className="tw">{fmtLong(e.start)}</div><div className="tt">{clean(e.title)}</div>
                     <div className="tn">Pay nothing before you see it.</div>
-                    <div className="tk-actions">{e.link ? <a className="tk-primary" href={e.link} target="_blank" rel="noreferrer">Open in Google Calendar</a> : <a className="tk-primary" href={gcalLink(e)} target="_blank" rel="noreferrer">Add to Google Calendar</a>}
-                      <a href={icsHref(e)} download="viewing.ics">Download .ics</a></div></div>
+                    <div className="tk-actions">{e.link ? <a className="tk-primary" href={e.link} target="_blank" rel="noreferrer" aria-label="Open in Google Calendar">Open calendar</a> : <a className="tk-primary" href={gcalLink(e)} target="_blank" rel="noreferrer" aria-label="Add to Google Calendar">Add to calendar</a>}
+                      <a href={icsHref(e)} download="viewing.ics" aria-label="Download .ics file">.ics</a></div></div>
                 </div>;
               })}
-              {events.length > 0 && needCards.filter((_, i) => needs[i].kind !== "craigslist_replies")}
-              <Inbox threads={threads} listings={mapListings} events={events} />
-              {needCards.filter((_, i) => needs[i].kind === "craigslist_replies")}
+              {events.length > 0 && needCards.filter((_, i) => sideNeeds[i].kind !== "craigslist_replies")}
+              <Inbox threads={threads} listings={mapListings} />
+              {needCards.filter((_, i) => sideNeeds[i].kind === "craigslist_replies")}
               {dealsEmpty && <div className="empty deals-empty">
                 <svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true"><path d="M4 6.5h16v11H4z M4 7l8 6 8-6" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" /></svg>
-                <b>No deals yet</b>When your agent emails a landlord, the conversation, the price and the safety checks show up here.</div>}
+                <b>{consent?.approvalId ? "Waiting for your OK" : "No deals yet"}</b></div>}
             </div>
           </div>
         </section>
@@ -539,9 +540,9 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
 
 function needCopy(n: Need): { title: string; body?: string; draft?: string } {
   switch (n.kind) {
-    case "autopilot_consent": return { title: "Let me handle it end to end?", body: "I'll email safe landlords as you, negotiate under your budget, refuse any money before a viewing and book the first slot that fits." };
-    case "craigslist_replies": return { title: "Click Reply on Craigslist", body: "I wrote the message and copied it. Craigslist only lets a human click Reply." };
-    case "approve_send": return { title: "OK to email this landlord as you?", draft: n.body };
+    case "autopilot_consent": return { title: "Handle it end to end?", body: "Email, negotiate, book. No money upfront." };
+    case "craigslist_replies": return { title: "Reply on Craigslist" };
+    case "approve_send": return { title: "Email this landlord?", draft: n.body };
     case "confirm_booking": return { title: "Book this viewing?", body: n.body };
     default: return { title: n.title, body: n.body };
   }
@@ -551,7 +552,7 @@ function Draft({ text, hidden = false }: { text: string; hidden?: boolean }) {
   const [open, setOpen] = useState(false);
   return <>
     {(!hidden || open) && <pre className={open ? "" : "clamp"}>{text}</pre>}
-    <button className="th-more" onClick={() => setOpen(!open)}>{open ? "Show less" : hidden ? "Preview the message" : "Read the full message"}</button>
+    <button className="th-more" onClick={() => setOpen(!open)}>{open ? "Less" : hidden ? "Preview" : "Full message"}</button>
   </>;
 }
 
@@ -568,15 +569,15 @@ function NeedCard({ n, listingOf, onApprove, onPaste }: { n: Need; listingOf: (a
       <div className={`cl-opt${open ? " open" : ""}`}>
         <div className="cl-row">
           <span className="cl-k">Optional</span>
-          <p><b>{items.length} more Craigslist listing{items.length === 1 ? "" : "s"}.</b> Craigslist only lets a human click Reply; the messages are written.</p>
-          <button className="ghost xs" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? "Hide" : "Open drafts"}</button>
+          <p><b>{items.length} Craigslist draft{items.length === 1 ? "" : "s"}</b></p>
+          <button className="ghost xs" aria-expanded={open} aria-label={open ? "Hide Craigslist drafts" : "Open Craigslist drafts (Craigslist only lets a human click Reply)"} onClick={() => setOpen(!open)}>{open ? "Hide" : "Open"}</button>
         </div>
         {open && <ul className="cl-items">
           {items.map((d) => { const l = listingOf(d.approvalId, d.listingId); return (
             <li key={d.approvalId}>
               <div className="cl-t">{l ? short(l.title, 60) : "Craigslist listing"}{l?.priceMonthly ? <span>${l.priceMonthly.toLocaleString("en-US")}/mo</span> : null}</div>
               <Draft text={d.message} hidden />
-              <div className="ap-actions"><button className="primary sm" onClick={() => onPaste(d)}>Open listing & paste</button><button className="ghost sm" onClick={() => onApprove(d.approvalId, false)}>Skip this one</button></div>
+              <div className="ap-actions"><button className="primary sm" onClick={() => onPaste(d)} aria-label="Open listing and paste the message">Open & paste</button><button className="ghost sm" onClick={() => onApprove(d.approvalId, false)}>Skip</button></div>
             </li>); })}
         </ul>}
       </div>
@@ -584,7 +585,7 @@ function NeedCard({ n, listingOf, onApprove, onPaste }: { n: Need; listingOf: (a
   }
   return (
     <div className={`ap need k-${n.kind}`}>
-      <div className="ap-who"><span className="avatar sm"><Bot size={16} /></span>Your agent needs you{listing && <em>{short(listing.title, 44)}</em>}</div>
+      <div className="ap-who" aria-label="Your agent needs you"><span className="avatar sm"><Bot size={16} /></span>Needs you{listing && <em>{short(listing.title, 44)}</em>}</div>
       <div className="ap-t">{c.title}</div>
       {c.body && <p className="ap-b">{c.body}</p>}
       {c.draft && <Draft text={c.draft} />}

@@ -62,7 +62,7 @@ function Typed({ text, live, onDone }: { text: string; live: boolean; onDone?: (
   return <>{text.slice(0, n)}{n < text.length && <span className="caret" aria-hidden="true" />}</>;
 }
 
-function Bubble({ x, last, onTyped }: { x: Thread["messages"][number]; last: boolean; onTyped?: () => void }) {
+function Bubble({ x, last, tight, onTyped }: { x: Thread["messages"][number]; last: boolean; tight?: boolean; onTyped?: () => void }) {
   const [open, setOpen] = useState(false);
   // Newer than page load = arrived while you watched: it slides in from its own side and glows once.
   const fresh = !!PAGE_LOAD && x.at > PAGE_LOAD;
@@ -70,46 +70,46 @@ function Bubble({ x, last, onTyped }: { x: Thread["messages"][number]; last: boo
   const [typing, setTyping] = useState(live);
   const long = x.text.length > 220;
   // Only the newest live reply stays open while it types; older long ones collapse so the latest beat stays in view.
-  const clamp = long && !open && !(live && last);
+  // A peeked message (emails collapsed) is always clamped: the card stays a summary.
+  const clamp = (long || tight) && !open && (tight || !(live && last));
   return (
     <div className={`bub ${x.from === "landlord" ? "ll" : "ag"}${x.flagged ? " flagged" : ""}${fresh ? " fresh" : ""}${typing ? " live" : ""}`}>
-      <div className="bub-who">{x.from === "landlord" ? "Landlord" : "Your agent, as you"}<span>{ago(x.at)}</span></div>
+      <div className="bub-who">{x.from === "landlord" ? "Landlord" : "Agent"}<span>{ago(x.at)}</span></div>
       <div className={`bub-text${clamp ? " clamp" : ""}`} onClick={() => long && setOpen(!open)}>
         <Typed text={x.text} live={live} onDone={() => { setTyping(false); onTyped?.(); }} /></div>
-      {x.flagged && <div className="bub-flag"><i aria-hidden="true">!</i>Blocked: {x.flagged.join(", ")}</div>}
+      {x.flagged && <div className="bub-flag"><i aria-hidden="true">!</i>Blocked: {x.flagged[0].replace(/\s*\(.*\)$/, "")}</div>}
     </div>
   );
 }
 
 const usd = (n: number) => `$${n.toLocaleString("en-US")}`;
 
-type Ev = { title: string; start: string };
-const cleanTitle = (s: string) => s.replace(/^Viewing: /, "").replace(/^\[DEMO DATA\]\s*/, "").trim();
-const when = (iso: string) => new Date(iso).toLocaleString("en-US", { timeZone: "America/Los_Angeles", weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
 /** One plain-English line: what your agent did, and what happens next. You should never need to read the emails. */
-function headline(t: Thread, d: ReturnType<typeof deal>, replying: boolean, ev?: Ev): { tone: "ok" | "busy" | "guard" | "wait"; text: string } {
-  if (t.status === "booked") return { tone: "ok", text: ev ? `Viewing booked ${when(ev.start)}. You just show up.` : "Viewing booked. You just show up." };
-  if (replying) return { tone: "busy", text: "The landlord just replied. Your agent is answering…" };
-  const agreed = t.deal?.agreed;
-  if (agreed) return { tone: "busy", text: `Landlord agreed to ${usd(agreed)}/mo. Booking the viewing…` };
-  if (t.status === "viewing_proposed") return { tone: "wait", text: "Offered viewing times. Waiting for the landlord to pick one." };
+function headline(t: Thread, d: ReturnType<typeof deal>, replying: boolean): { tone: "ok" | "busy" | "guard" | "wait"; text: string } {
+  // Prices live in the deal bar below: the line only says what happened.
+  if (t.status === "booked") return { tone: "ok", text: "Viewing booked." };
+  if (replying) return { tone: "busy", text: "Landlord replied. Answering…" };
+  if (t.deal?.agreed) return { tone: "busy", text: "Price agreed. Booking…" };
+  if (t.status === "viewing_proposed") return { tone: "wait", text: "Sent viewing times. Waiting." };
   const flagged = t.messages.filter((m) => m.flagged);
   if (flagged.length) {
     const via = flagged.map((m) => m.text).join(" ").match(/zelle|wire|venmo|cash ?app|gift ?card|bitcoin|crypto|western union/i)?.[0];
-    return { tone: "guard", text: `Refused to pay${via ? ` by ${via[0].toUpperCase()}${via.slice(1).toLowerCase()}` : ""} before a viewing${d?.offered ? ` and countered ${usd(d.offered)}` : ""}. Waiting for the landlord.` };
+    return { tone: "guard", text: `Refused ${via ? `${via[0].toUpperCase()}${via.slice(1).toLowerCase()} ` : ""}deposit. Waiting.` };
   }
-  if (d?.offered) return { tone: "wait", text: `Countered ${usd(d.offered)} (they asked ${usd(d.asked)}). Waiting for the landlord.` };
-  if (t.status === "active") return { tone: "wait", text: "Asked for a live video tour and proof of the lease. Waiting for the landlord." };
-  return { tone: "wait", text: "Emailed the landlord as you. Waiting for a reply." };
+  if (d?.offered) return { tone: "wait", text: "Countered. Waiting on landlord." };
+  if (t.status === "active") return { tone: "wait", text: "Asked for a video tour. Waiting." };
+  return { tone: "wait", text: "Emailed. Waiting for a reply." };
 }
 
-function ThreadCard({ t, listing, ev }: { t: Thread; listing?: RankedListing; ev?: Ev }) {
+function ThreadCard({ t, listing }: { t: Thread; listing?: RankedListing }) {
   // The emails are the receipts, not the job: collapsed by default. Anything that arrives while you watch peeks in.
   const [open, setOpen] = useState(false);
   const [all, setAll] = useState(false);
   const last = t.messages[t.messages.length - 1];
-  const peek = t.messages.slice(-2).filter((m) => !!PAGE_LOAD && m.at > PAGE_LOAD);
+  // Only the newest message peeks in (clamped); the rest stay behind "Emails".
+  const peek = t.messages.slice(-1).filter((m) => !!PAGE_LOAD && m.at > PAGE_LOAD);
+  const [checksOpen, setChecksOpen] = useState(false);
   const msgs = open ? (all ? t.messages : t.messages.slice(-3)) : peek;
   // The landlord just wrote and the agent hasn't answered yet: show it working.
   const replying = last?.from === "landlord" && !last.flagged && t.status !== "booked" && Date.now() - new Date(last.at).getTime() < 3 * 60e3;
@@ -132,42 +132,44 @@ function ThreadCard({ t, listing, ev }: { t: Thread; listing?: RankedListing; ev
   }, [last?.at, reveal]);
   const d = deal(t, listing);
   const save = d?.offered ? d.asked - d.offered : 0;
-  const now = headline(t, d, replying, ev);
+  const now = headline(t, d, replying);
+  const checks = protocol(t, listing);
+  const okN = checks.filter((c) => c.state === "ok").length, blockedN = checks.some((c) => c.state === "blocked");
   return (
     <div ref={card} className={`th st-${t.status}${pulse ? " pulse" : ""}`}>
       <div className="th-head">
         <div className="th-title">{t.listingTitle.replace(/^\[DEMO DATA\]\s*/, "")}</div>
-        <span key={t.status} className={`st st-${t.status}`}>{STATUS[t.status] ?? t.status}</span>
+        {/* One compact indicator instead of five chips; the status itself is the line below. */}
+        <button className={`th-chk ${blockedN ? "blocked" : "ok"}`} aria-expanded={checksOpen} aria-label={`Safety checks: ${okN} of ${checks.length} passed${blockedN ? ", one blocked" : ""}. ${STATUS[t.status] ?? t.status}.`}
+          onClick={() => setChecksOpen(!checksOpen)}><i aria-hidden="true">{blockedN ? "!" : "✓"}</i>{okN}/{checks.length} checks</button>
       </div>
       <p key={now.text} className={`th-now ${now.tone}`} aria-live="polite"><i aria-hidden="true" />{now.text}</p>
-      <div className="th-k">Safety checks</div>
-      <ul className="proto" aria-label="Safety checks">
+      {checksOpen && <ul className="proto" aria-label="Safety checks">
         {/* Keyed by position so a chip keeps its node and cross-fades when its state flips; the dot remounts to replay its tick. */}
-        {protocol(t, listing).map((c, i) => <li key={i} className={c.state} style={{ "--i": i } as CSSProperties}>
+        {checks.map((c, i) => <li key={i} className={c.state} style={{ "--i": i } as CSSProperties}>
           <i key={c.state} aria-hidden="true">{c.state === "ok" ? "✓" : c.state === "blocked" ? "!" : ""}</i>{c.k}</li>)}
-      </ul>
+      </ul>}
       {d && <div className="deal">
         {d.listed && <div className="listed"><span>Listed</span><b>{usd(d.listed)}</b></div>}
-        <div className={`asked${d.offered ? " struck" : ""}`}><span>They asked</span><b>{usd(d.asked)}</b></div>
-        <div className={d.offered ? "offer" : "pending"}><span>{t.status === "booked" ? "Agent got" : "Agent offered"}</span><b key={d.offered ?? "p"}>{d.offered ? usd(d.offered) : "…"}</b></div>
+        <div className={`asked${d.offered ? " struck" : ""}`}><span>Asked</span><b>{usd(d.asked)}</b></div>
+        <div className={d.offered ? "offer" : "pending"}><span>{t.status === "booked" ? "Got" : "Offered"}</span><b key={d.offered ?? "p"}>{d.offered ? usd(d.offered) : "…"}</b></div>
         {/* Always rendered so the bar never reflows when the saving lands. */}
-        <div className={save > 0 ? "save" : "save pending"}><span>You save</span><b key={save}>{save > 0 ? `${usd(save)}/mo` : "…"}</b></div>
+        <div className={save > 0 ? "save" : "save pending"}><span>Saved</span><b key={save}>{save > 0 ? `${usd(save)}/mo` : "…"}</b></div>
       </div>}
       {(msgs.length > 0 || replying) && <div className="th-msgs">
-        {msgs.map((x, i) => <Bubble key={x.id ?? `${x.at}-${i}`} x={x} last={i === msgs.length - 1} onTyped={i === msgs.length - 1 ? reveal : undefined} />)}
-        {replying && <div className="bub ag replying"><div className="bub-who">Your agent, as you</div><div className="typing"><i /><i /><i /></div><span className="replying-t">Reading the reply and checking your calendar</span></div>}
+        {msgs.map((x, i) => <Bubble key={x.id ?? `${x.at}-${i}`} x={x} last={i === msgs.length - 1} tight={!open} onTyped={i === msgs.length - 1 ? reveal : undefined} />)}
+        {replying && <div className="bub ag replying"><div className="bub-who">Agent</div><div className="typing"><i /><i /><i /></div><span className="replying-t">Replying…</span></div>}
       </div>}
       <div className="th-foot">
-        <button className="th-more" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? "Hide the emails" : `See the emails (${t.messages.length})`}</button>
+        <button className="th-more" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? "Hide emails" : `Emails (${t.messages.length})`}</button>
         {open && t.messages.length > 3 && <button className="th-more" onClick={() => setAll(!all)}>{all ? "Latest only" : `${t.messages.length - 3} earlier`}</button>}
       </div>
     </div>
   );
 }
 
-export function Inbox({ threads, listings = [], events = [] }: { threads: Thread[]; listings?: RankedListing[]; events?: Ev[] }) {
+export function Inbox({ threads, listings = [] }: { threads: Thread[]; listings?: RankedListing[] }) {
   return <>{threads.map((t) => {
-    const title = cleanTitle(t.listingTitle);
-    return <ThreadCard key={t.id} t={t} listing={listings.find((l) => l.id === t.listingId)} ev={events.find((e) => cleanTitle(e.title) === title)} />;
+    return <ThreadCard key={t.id} t={t} listing={listings.find((l) => l.id === t.listingId)} />;
   })}</>;
 }

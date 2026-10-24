@@ -21,12 +21,12 @@ describe("autopilot end to end (mock LLM, mail, calendar)", () => {
   beforeEach(() => { resetState(); sent.length = 0; });
   afterEach(() => vi.unstubAllEnvs());
 
-  it("search -> one consent -> auto outreach -> counter -> deal -> booked, narrated in Spanish", async () => {
+  it("search -> one consent -> auto outreach -> counter -> deal -> booked, narrated in short English", async () => {
     const reply = await chat(SEARCH);
     const s = state();
-    // Short reply: counts + one next step, never the listings as prose.
+    // Short English reply (even to a Spanish request): counts + one next step, never the listings as prose.
     expect(reply.split("\n").length).toBeLessThanOrEqual(2);
-    expect(reply).toMatch(/Encontré \d+ lugares seguros y bloqueé \d+ estafas?\./);
+    expect(reply).toMatch(/^Found \d+ safe places, blocked \d+ scams?\.\nHandle it end to end, starting with #1\?$/);
     expect(reply).not.toMatch(/DEMO DATA|Caltrain/);
     // Undecided: exactly one consent approval, nothing sent yet.
     const consent = s.approvals.filter((a) => a.kind === "autopilot_consent");
@@ -52,8 +52,8 @@ describe("autopilot end to end (mock LLM, mail, calendar)", () => {
     expect(drafts.length).toBeGreaterThan(0);
     expect(cl[0].kind === "craigslist_replies" && cl[0].items.every((i) => /craigslist\.org/.test(i.url) && i.message.length > 50)).toBe(true);
     expect(view.stage).toBe("waiting");
-    expect(view.now).toMatch(/Waiting on the landlord/);
-    expect(autoText()).toMatch(/Le escribí al dueño de "Furnished 1BR sublet near Caltrain"/);
+    expect(view.now).toBe("Waiting on the landlord.");
+    expect(autoText()).toMatch(/^✉️ Emailed the landlord\.$/m);
     expect(autoText()).toMatch(/Craigslist/);
 
     // Landlord quotes a price: agent counters within budget and keeps asking for proof.
@@ -61,7 +61,7 @@ describe("autopilot end to end (mock LLM, mail, calendar)", () => {
     expect(t.messages.at(-1)!.text).toMatch(/would you do \$3,600\/mo/);
     expect(t.deal).toMatchObject({ asked: 3800, offered: 3600 });
     expect(autopilotView(s).stage).toBe("negotiating");
-    expect(autoText()).toMatch(/pide \$3,800\/mes\. Le contraofrecí \$3,600\/mes/);
+    expect(autoText()).toMatch(/💬 Offered \$3,600\/mo \(asked \$3,800\)\./);
 
     // Landlord accepts and proposes a window: first free slot is booked, one confirmation email, no approval.
     const before = sent.length;
@@ -75,18 +75,18 @@ describe("autopilot end to end (mock LLM, mail, calendar)", () => {
     const v2 = autopilotView(s);
     expect(v2).toMatchObject({ stage: "booked" });
     expect(v2.stats.savedPerMonth).toBe(200);
-    expect(autoText()).toMatch(/Te conseguí \$200\/mes de descuento/);
-    expect(autoText()).toMatch(/Visita agendada lunes \d+ (oct|nov), 5:30 PM PT/);
+    expect(autoText()).toMatch(/💸 Saved \$200\/mo\./);
+    expect(autoText()).toMatch(/📅 Viewing: Mon (Oct|Nov) \d+, 5:30 PM\./);
 
     // Later money-before-viewing: refused, flagged, booking stays visible, autopilot decides (no question to the user).
     await handleInbound({ from: t.landlordEmail, text: "Actually I'm out of the country, please Zelle the deposit today to hold it.", messageId: "ap3" });
     expect(t.status).toBe("booked");
     expect(t.messages.at(-1)!.text).toMatch(/don't send any deposit/);
     expect(s.approvals.some((a) => a.kind === "decision" && a.status === "pending")).toBe(false);
-    expect(autoText()).toMatch(/🚩 El dueño de "Furnished 1BR sublet near Caltrain" dice que está fuera del país\. Me negué/);
+    expect(autoText()).toMatch(/🚩 Says they're out of the country\. Refused, dropped it\./);
 
     // Each milestone is narrated exactly once, and every email went to the allowlist.
-    expect(autoText().match(/Te conseguí/g)).toHaveLength(1);
+    expect(autoText().match(/Saved \$/g)).toHaveLength(1);
     expect(sent.every(emailAllowed)).toBe(true);
   }, 30000);
 
@@ -94,7 +94,7 @@ describe("autopilot end to end (mock LLM, mail, calendar)", () => {
     vi.stubEnv("AUTOPILOT", "1");
     resetState();
     const reply = await chat(SEARCH);
-    expect(reply).toMatch(/Ya le estoy escribiendo al dueño del #\d\./);
+    expect(reply).toMatch(/Emailing the landlord of #\d now\./);
     expect(state().approvals.some((a) => a.kind === "autopilot_consent")).toBe(false);
     expect(state().threads).toHaveLength(1);
     // Off switch: back to per-message approvals.
@@ -115,10 +115,10 @@ describe("autopilot end to end (mock LLM, mail, calendar)", () => {
     expect(v.stage).toBe("scheduling");
     const confirm = v.needsYou.find((n) => n.kind === "confirm_booking");
     expect(confirm).toBeTruthy();
-    expect(autoText()).toMatch(/aceptó lunes \d+ (oct|nov), 5:30 PM PT\. Confirmalo/);
+    expect(autoText()).toMatch(/Landlord picked Mon (Oct|Nov) \d+, 5:30 PM\. Confirm to book\./);
     await resolveApproval(confirm!.kind === "confirm_booking" ? confirm!.approvalId : "", true);
     expect(t.status).toBe("booked");
-    expect(autoText()).toMatch(/Visita agendada/);
+    expect(autoText()).toMatch(/📅 Viewing:/);
   }, 30000);
 
   it("autopilot survives serverless via the session snapshot", async () => {
@@ -178,7 +178,7 @@ describe("landlord red-flag severity (demo story)", () => {
     const { t, l } = await start();
     await handleInbound({ from: t.landlordEmail, text: "It's $3,800/mo. Can you Zelle a $7,600 deposit today to hold it?", messageId: "m1" });
     expect(l().scam.light).toBe("yellow");
-    expect(autopilotView(state()).now).toMatch(/Refused money before a viewing and countered \$3,600/);
+    expect(autopilotView(state()).now).toBe("Refused deposit, offered $3,600. Waiting.");
     await handleInbound({ from: t.landlordEmail, text: "Ok fair, no deposit until you see it. $3,600 works. Video tour Monday after 5pm?", messageId: "m2" });
     expect(state().threads[0].status).toBe("booked");
     expect(l().scam.light).toBe("yellow");

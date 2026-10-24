@@ -81,7 +81,7 @@ export function Mission({ criteria: c, scanned, shown, flagged, threads, booked,
       <div className="mission-row">
         <div className="mission-ask">
           <span>Your search</span>
-          <b title={want ?? undefined}>{want ?? "Tell your agent what you need"}</b>
+          <b title={want ?? undefined}>{want ?? "Not set yet"}</b>
         </div>
         <ol className="track" style={{ "--p": progress } as React.CSSProperties}>
           {steps.map((s, i) => {
@@ -102,7 +102,7 @@ export function Mission({ criteria: c, scanned, shown, flagged, threads, booked,
         {scanned > 0 && <div className="mstats">
           <span><Num v={scanned} f={int} /> scanned</span>
           <span className="red"><Num v={blocked} f={int} /> scam{blocked === 1 ? "" : "s"} blocked</span>
-          <span className="acc">About <Num v={minutes} f={hrs} /> saved</span>
+          <span className="acc" title="Estimated time saved"><Num v={minutes} f={hrs} /> saved</span>
         </div>}
       </div>
     </div>

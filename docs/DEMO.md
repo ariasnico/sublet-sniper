@@ -14,7 +14,7 @@ Goal: the judges see an agent rent a place end to end while the human only talks
 | Time | You say | You do | Screen |
 |---|---|---|---|
 | 0:00-0:12 | "Finding a sublet in SF costs hours, landlords ghost you, and the scams are brutal: fake listings, 'I'm out of the country, Zelle me the deposit'." | Landing page hero. Click **Open the app**. | Clean app, empty state. |
-| 0:12-0:30 | "So I built a personal rental agent. I just tell it what I want." | Click the mic and say: "Busco 1BR amoblado en SF, menos de 4000, del 1 de noviembre al 15 de diciembre". | Live transcript, scanning radar, then ~770 listings scanned, 6 scams caught, ranked safe matches with photos. |
+| 0:12-0:30 | "So I built a personal rental agent. I just tell it what I want." | Click the mic and say: "Furnished 1BR in SF under $4,000, Nov 1 to Dec 15". | Live transcript, scanning radar, then ~770 listings scanned, 6 scams caught, ranked safe matches. Agent answers in English: "Found 12 safe places, blocked 6 scams." |
 | 0:30-0:50 | "Every listing gets a scam score. Watch what happens with a listing that's too good to be true." | Paste the cheap Craigslist link in chat. | **Scam X-ray** opens by itself: price vs SF median, red-flag phrases highlighted, signal breakdown. |
 | 0:50-1:00 | "Now I let it work for me." | Approve once ("Yes, go" / approve the first message). | Deal card appears: email sent as me to the landlord. |
 | 1:00-1:25 | "The landlord replies... and it's the classic scam move." | From the phone send: "Yes it's available! It's $3,800/mo. Can you Zelle me a $7,600 deposit today to hold it?" | **SCAM BLOCKED** moment. Agent's reply types itself: refuses any money before a viewing. |
@@ -28,6 +28,6 @@ Goal: the judges see an agent rent a place end to end while the human only talks
 - Send the Zelle message first and the "$3,600 works" message second: ending on the booking keeps the deal status at "Viewing booked".
 
 ## Fallbacks
-- Voice fails: type the same sentence (or click the first suggestion chip).
+- Voice fails: type the same sentence (or click the first suggestion chip). The voice language selector should be on English. The agent understands Spanish but always answers in English.
 - Craigslist live fails: the app falls back to the snapshot automatically; the flow is identical.
 - Email is slow: use `?preview=scam` / `?preview=booked` to show the moments and narrate.

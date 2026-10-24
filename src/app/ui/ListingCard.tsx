@@ -67,10 +67,12 @@ export function ListingCard({ l, i, onContact, pinned, onHover, onXray }: { l: R
   const hood = l.neighborhood ?? l.hood ?? "San Francisco";
   const title = l.title.replace(/^\[DEMO DATA\]\s*/i, "");
   const fit = l.scam.light === "red" ? [] : fitLabels(l.fit);
+  const details = [TYPE[l.type] ?? l.type, hood, l.distanceKm != null ? `${l.distanceKm.toFixed(1)} km` : null, l.furnished ? "Furnished" : null, ...fit].filter(Boolean).join(" · ");
+  const nSignals = (l.scam.signals ?? []).length || l.scam.reasons.length;
   const showImg = !pendingPhoto && img && imgOk;
   return (
     <article className={`lc ${l.scam.light}${pinned ? " pinned" : ""}${fresh ? " fresh" : ""}`} onMouseEnter={() => onHover?.(l.id)} onMouseLeave={() => onHover?.(null)}>
-      {pinned && <div className="pin-banner">The link you pasted: scam risk {l.scam.score}/100{l.scam.light === "red" ? ". Do not pay anything." : ""}</div>}
+      {pinned && <div className="pin-banner">Your link{l.scam.light === "red" ? ": don't pay" : ""}</div>}
       <div className="lc-main">
         <a className="lc-photo" href={l.url} target="_blank" rel="noreferrer" tabIndex={-1} aria-hidden="true">
           {(pendingPhoto || (showImg && !loaded)) && <div className="lc-shimmer" />}
@@ -79,35 +81,25 @@ export function ListingCard({ l, i, onContact, pinned, onHover, onXray }: { l: R
             ? <img ref={imgRef} src={img} alt="" loading={i != null && i < 8 ? "eager" : "lazy"} decoding="async" className={loaded ? "in" : ""} onLoad={() => setLoaded(true)} onError={() => (img !== full ? setUseFull(true) : setImgOk(false))} />
             : <div className="lc-ph"><svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true"><path d="M3.5 11 12 4l8.5 7M6 9.5V20h4.5v-5h3v5H18V9.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg><span>{hood}</span></div>}
           {i != null && <span className="lc-rank">#{i + 1}</span>}
-          {l.scam.light === "red" && <span className="lc-stamp"><b>Scam</b></span>}
         </a>
         <div className="lc-body">
           <div className="lc-top">
-            <a className="lc-title" href={l.url} target="_blank" rel="noreferrer">{title}</a>
+            {/* Details (type, area, distance, fit) ride in the tooltip: the card itself is price, title, verdict, action. */}
+            <a className="lc-title" href={l.url} target="_blank" rel="noreferrer" title={details}>{title}</a>
             {l.scam.light !== "green" && <RiskRing score={l.scam.score} light={l.scam.light} />}
           </div>
           <div className="lc-price"><b>${l.priceMonthly?.toLocaleString("en-US") ?? "?"}</b><span>/mo</span>
-            <em className={`risk-label ${l.scam.light}`}>{l.scam.light === "green" && <i aria-hidden="true" />}{LABEL[l.scam.light]}</em></div>
-          <div className="chips">
-            <span>{TYPE[l.type] ?? l.type}</span><span>{hood}</span>
-            {l.distanceKm != null && <span>{l.distanceKm.toFixed(1)} km</span>}
-            {l.furnished && <span>Furnished</span>}
-            {l.demo && <span className="demo">Demo data</span>}
-            {!l.demo && <span className="src">{l.source}</span>}
-          </div>
-          {fit.length > 0 && <div className="lc-fit">{fit.map((f) => <span key={f}><svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M2.5 6.2 4.9 8.5 9.5 3.6" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /></svg>{f}</span>)}</div>}
+            <em className={`risk-label ${l.scam.light}`}>{l.scam.light === "green" && <i aria-hidden="true" />}{LABEL[l.scam.light]}</em>
+            {l.demo && <em className="demo">Demo</em>}</div>
         </div>
       </div>
-      {l.scam.light !== "green" && onXray ? <div className="lc-xr">
-        <span>{l.scam.reasons.filter((r) => !r.startsWith("info:"))[0]?.replace(/\s*\(pHash.*$/, "")}</span>
-        <button className="xr-btn primary sm" onClick={() => onXray(l.id)}>Scam X-ray<em>{(l.scam.signals ?? []).length || l.scam.reasons.length} signal{((l.scam.signals ?? []).length || l.scam.reasons.length) > 1 ? "s" : ""}</em></button>
-      </div> : l.scam.light !== "green" && l.scam.reasons.length > 0 && <>
-        <button className="lc-why" onClick={() => setOpen(!open)} aria-expanded={open}>{open ? "Hide" : "Show"} {l.scam.reasons.length} risk signal{l.scam.reasons.length > 1 ? "s" : ""}</button>
+      {!onXray && l.scam.light !== "green" && l.scam.reasons.length > 0 && <>
+        <button className="lc-why" onClick={() => setOpen(!open)} aria-expanded={open}>{open ? "Hide" : "Why?"}</button>
         {open && <ul className="lc-reasons">{l.scam.reasons.slice(0, 4).map((r) => <li key={r}>{r}</li>)}</ul>}
       </>}
-      {onContact && l.scam.light !== "red" && <div className="lc-actions">
-        <button className={`sm ${i === 0 && l.scam.light === "green" ? "primary" : l.scam.light === "green" ? "soft" : "ghost"}`} onClick={() => onContact(l.id)}>Let my agent reach out</button>
-        <a href={l.url} target="_blank" rel="noreferrer">View on Craigslist</a>
+      {((onContact && l.scam.light !== "red") || (onXray && l.scam.light !== "green")) && <div className="lc-actions">
+        {onXray && l.scam.light !== "green" && <button className="xr-btn primary sm" onClick={() => onXray(l.id)} aria-label={`Scam X-ray: ${nSignals} signal${nSignals > 1 ? "s" : ""}`}>Scam X-ray</button>}
+        {onContact && l.scam.light !== "red" && <button className={`sm ${i === 0 && l.scam.light === "green" ? "primary" : l.scam.light === "green" ? "soft" : "ghost"}`} onClick={() => onContact(l.id)} aria-label="Let my agent reach out">Reach out</button>}
       </div>}
     </article>
   );

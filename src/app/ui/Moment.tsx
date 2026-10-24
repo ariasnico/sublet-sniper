@@ -37,9 +37,8 @@ export function Moment({ m, onDone }: { m: MomentData | null; onDone: () => void
           <div className="shield"><svg viewBox="0 0 24 24" width="44" height="44" aria-hidden="true"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3Z" fill="currentColor" /><path d="M8.5 12.5 11 15l4.5-5" stroke="#fff" strokeWidth="2.2" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg></div>
           <div className="stamp">SCAM BLOCKED</div>
           <p className="moment-title">{m.title}</p>
-          <p className="moment-sub">{m.detail}</p>
-          {m.saved ? <p className="moment-saved"><b>${m.saved.toLocaleString("en-US")}</b> protected. Your agent refused to pay before a viewing.</p>
-            : <p className="moment-foot">Your agent refused. Not a single dollar left your account.</p>}
+          {m.saved ? <p className="moment-saved">{m.detail}. <b>${m.saved.toLocaleString("en-US")}</b> protected.</p>
+            : <p className="moment-sub">{m.detail}.</p>}
           <i className="moment-timer" aria-hidden="true" style={{ animationDuration: "3200ms" }} />
         </div>
       ) : (
@@ -48,7 +47,6 @@ export function Moment({ m, onDone }: { m: MomentData | null; onDone: () => void
           <div className="ticket-k">Viewing booked</div>
           <p className="moment-when">{m.when}</p>
           <p className="moment-title">{m.title}</p>
-          <p className="moment-foot">On your calendar, confirmation sent to the landlord. Pay nothing before you see it.</p>
           <i className="moment-timer" aria-hidden="true" style={{ animationDuration: "3600ms" }} />
         </div>
       )}

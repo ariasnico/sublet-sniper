@@ -5,7 +5,7 @@ import type { RankedListing, ScamSignal } from "@/lib/types";
 import { RiskRing } from "./ListingCard";
 import { peekPhotos } from "./photos";
 
-const VERDICT = { green: "Looks safe", yellow: "Be careful with this one", red: "Likely scam. Do not send money." } as const;
+const VERDICT = { green: "Looks safe", yellow: "Caution", red: "Likely scam" } as const;
 
 /** Wrap every quoted red-flag phrase from the signals in <mark>, case-insensitively. */
 function highlight(text: string, quotes: string[]): ReactNode[] {
@@ -44,6 +44,8 @@ export function XRay({ l: open, onClose }: { l: RankedListing | null; onClose: (
   if (!l) return null;
   const signals = (l.scam.signals ?? []).slice().sort((a, b) => b.w - a.w);
   const total = signals.reduce((a, s) => a + s.w, 0);
+  // Some risk comes from the landlord's emails (no weighted listing signal): show those reasons instead of "none".
+  const reasons = l.scam.reasons.filter((r) => !r.startsWith("info:") && !/^no scam signals/i.test(r)).map((r) => r.replace(/\s*\(.*\)$/, "")).slice(0, 4);
   const price = signals.find((s) => s.median);
   const photo = signals.find((s) => s.match);
   const body = l.body?.trim() || "No description on the listing.";
@@ -63,19 +65,19 @@ export function XRay({ l: open, onClose }: { l: RankedListing | null; onClose: (
 
         <div className="xr-grid">
           <section>
-            <h4>What the listing says</h4>
+            <h4>Listing</h4>
             <div className="xr-body">{highlight(body, signals.map((s) => s.quote ?? ""))}</div>
             {price?.median && price.price && <div className="xr-price">
-              <h4>Price against the SF median</h4>
+              <h4>vs. SF median</h4>
               <div className="xr-scale">
                 <i className="xr-fill" style={{ width: `${Math.min(100, (price.price / (price.median * 1.4)) * 100)}%` }} />
                 <span className="xr-med" style={{ left: `${100 / 1.4}%` }}>Median ${price.median.toLocaleString("en-US")}</span>
               </div>
-              <p>This one asks {Math.round((price.price / price.median) * 100)}% of what a {l.type === "unknown" ? "place" : l.type.toUpperCase()} usually rents for.</p>
+              <p>{Math.round((price.price / price.median) * 100)}% of median.</p>
             </div>}
           </section>
           <section>
-            <h4>Why it scored {l.scam.score}</h4>
+            <h4>Signals</h4>
             {signals.length ? <>
               <div className="xr-stack" aria-hidden="true">
                 {signals.map((s, i) => <i key={i} style={{ flexGrow: s.w, animationDelay: `${100 + Math.min(i, 5) * 40}ms` }} />)}
@@ -84,8 +86,9 @@ export function XRay({ l: open, onClose }: { l: RankedListing | null; onClose: (
               <ol className="xr-signals">
                 {signals.map((s, i) => <li key={i} style={{ animationDelay: `${120 + Math.min(i, 5) * 40}ms` }}><b>+{s.w}</b><span>{shortLabel(s)}{s.quote && <q>{s.quote}</q>}</span></li>)}
               </ol>
-              {total > 100 && <p className="xr-cap">Signals add up to {total}; the score is capped at 100.</p>}
-            </> : <p className="xr-none">No scam signals: the price is in market range, there are no risky payment requests and the text and photos are not copied from another listing.</p>}
+              {total > 100 && <p className="xr-cap">Capped at 100.</p>}
+            </> : reasons.length ? <ol className="xr-signals">{reasons.map((r, i) => <li key={i}><b>!</b><span>{r}</span></li>)}</ol>
+              : <p className="xr-none">No scam signals.</p>}
           </section>
         </div>
 
@@ -99,8 +102,8 @@ export function XRay({ l: open, onClose }: { l: RankedListing | null; onClose: (
         </section>}
 
         <footer className="xr-foot">
-          {l.scam.light === "red" ? "Your agent will not contact this landlord and will refuse any request for money before a viewing." : "Your agent asks for a live video walkthrough and leaseholder confirmation before anything is paid."}
-          <a href={l.url} target="_blank" rel="noreferrer">Open the original listing</a>
+          {l.scam.light === "red" ? "Your agent won't contact it." : "No money before a viewing."}
+          <a href={l.url} target="_blank" rel="noreferrer">Original listing</a>
         </footer>
       </div>
     </div>
