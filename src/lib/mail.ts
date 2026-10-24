@@ -35,16 +35,16 @@ export function parseInbound(m: Record<string, unknown>): InboundMail {
 }
 
 /** Polls recent inbound messages (used when no public webhook URL is available, e.g. localhost). */
-export async function listInbound(limit = 20): Promise<InboundMail[]> {
+export async function listInbound(seen: Set<string> = new Set(), limit = 20): Promise<InboundMail[]> {
   if (!mailLive()) return [];
   const enc = encodeURIComponent(inbox());
-  const r = await am(`/inboxes/${enc}/messages?limit=${limit}`);
+  const r = await am(`/inboxes/${enc}/messages?limit=${limit}&labels=received`);
   const msgs = (Array.isArray(r.messages) ? r.messages : []) as Record<string, unknown>[];
   const own = inbox().toLowerCase();
   const out: InboundMail[] = [];
   for (const m of msgs) {
     const labels = Array.isArray(m.labels) ? m.labels.map(String) : [];
-    if (labels.includes("sent") || fromAddress(String(m.from ?? "")) === own) continue;
+    if (labels.includes("sent") || fromAddress(String(m.from ?? "")) === own || seen.has(String(m.message_id))) continue;
     const full = await am(`/inboxes/${enc}/messages/${encodeURIComponent(String(m.message_id))}`);
     out.push(parseInbound(full));
   }

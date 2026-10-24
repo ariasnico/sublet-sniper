@@ -24,7 +24,7 @@ export function emailAllowed(email: string): boolean {
 
 export function firstContact(p: RenterProfile, title: string, price: number | null): { subject: string; text: string } {
   return {
-    subject: `Re: ${title}`,
+    subject: `[Sublet Sniper demo] ${title.replace(/^\[DEMO DATA\]\s*/, "")}`,
     text: `Hi! I'm ${p.name}. I saw your listing "${title}"${price ? ` ($${price.toLocaleString("en-US")}/mo)` : ""} and I'm very interested.\n\n` +
       `About me: ${p.occupation}. ${p.about}\nDates: ${p.moveIn} to ${p.moveOut}. ${p.pets}, ${p.smoker ? "smoker" : "non-smoker"}. ${p.references}.\n\n` +
       `Is it still available? Could we do a quick live video walkthrough or an in-person viewing this week?\n\nThanks,\n${p.name}\n(sent by my rental assistant, I review every message)`,

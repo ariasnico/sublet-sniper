@@ -45,6 +45,12 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
 
   const refresh = useCallback(async () => { const r = await fetch("/api/state", { cache: "no-store" }); setS((await r.json()) as S); }, []);
   useEffect(() => { void refresh(); const id = setInterval(() => void refresh(), 2500); return () => clearInterval(id); }, [refresh]);
+  const mailLive = s?.modes.mail === "agentmail";
+  useEffect(() => {
+    if (!mailLive) return;
+    const id = setInterval(() => { void post("/api/mail/poll").then(() => refresh()); }, 15000);
+    return () => clearInterval(id);
+  }, [mailLive, refresh]);
   useEffect(() => { chatEnd.current?.scrollIntoView({ behavior: "smooth" }); }, [s?.chat.length]);
 
   const say = (text: string) => {
