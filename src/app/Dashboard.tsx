@@ -181,7 +181,7 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
     if (!s?.chat.length && !busy) return;
     chatEnd.current?.scrollIntoView({ behavior: scrolledOnce.current ? "smooth" : "auto", block: "end" });
     scrolledOnce.current = true;
-  }, [s?.chat.length, busy]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [s?.chat.length, busy]);
 
   const say = (text: string) => {
     if (!speak || typeof window === "undefined" || !("speechSynthesis" in window)) return;
