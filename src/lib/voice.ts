@@ -75,6 +75,8 @@ export async function callVars(t: Thread, call: CallRecord): Promise<Vars> {
     move_in: humanDate(s.profile.moveIn), move_out: humanDate(s.profile.moveOut),
     free_slots: slots.map((x) => fmtLA(x.start)).join("; ") || "weekday evenings after 5 PM",
     today: new Intl.DateTimeFormat("en-US", { timeZone: TZ, weekday: "long", month: "long", day: "numeric", year: "numeric" }).format(new Date()),
+    renter_profile: `- ${s.profile.occupation}. ${s.profile.about} ${s.profile.smoker ? "Smoker" : "Non-smoker"}, ${s.profile.pets}. ${s.profile.references}.`,
+    callback_number: process.env.VOICE_CALLBACK_NUMBER || "+1 415 582 1858", renter_email: s.profile.email,
     call_id: call.id, thread_id: t.id, am_thread_id: t.agentmailThreadId ?? "", listing_id: t.listingId,
   };
 }
@@ -250,6 +252,10 @@ export function spokenPrices(text: string): number[] {
   return out;
 }
 
+/** Expressive voice tags ("[warm]", "[friendly]") are for the TTS, not for people reading the transcript. */
+const firstSentence = (t: string) => { const x = t.replace(/^The (AI )?agent[^,.]*?(,|\.)\s*/i, "").split(/(?<=\.)\s/)[0] ?? t; return x.length > 140 ? `${x.slice(0, 137)}…` : x; };
+export const stripTags = (t: string) => t.replace(/\[[a-z][a-z \-]{0,24}\]\s*/gi, "").replace(/\s{2,}/g, " ").trim();
+
 /** Applies a finished conversation: transcript on the thread (channel "call"), deal, flags, narration, recap email. */
 export async function finishCall(call: CallRecord, c: ElConversation, opts: { recap: boolean } = { recap: true }) {
   const s = state();
@@ -257,7 +263,7 @@ export async function finishCall(call: CallRecord, c: ElConversation, opts: { re
   const t0 = Date.parse(call.startedAt) || Date.now();
   const turns = (c.transcript ?? []).filter((x) => typeof x.message === "string" && x.message.trim());
   const transcript: ThreadMsg[] = turns.length
-    ? turns.map((x, i) => ({ id: `${call.id}-${i}`, from: x.role === "agent" ? "agent" : "landlord", text: String(x.message).trim(), at: new Date(t0 + (x.time_in_call_secs ?? i * 5) * 1000).toISOString(), channel: "call" }))
+    ? turns.map((x, i) => ({ id: `${call.id}-${i}`, from: x.role === "agent" ? "agent" : "landlord", text: stripTags(String(x.message)), at: new Date(t0 + (x.time_in_call_secs ?? i * 5) * 1000).toISOString(), channel: "call" }))
     : call.transcript;
   for (const m of transcript) if (m.from === "landlord") { const f = detectRedFlags(m.text); m.flagged = f.length ? f : undefined; }
   call.transcript = transcript;
@@ -290,8 +296,10 @@ export async function finishCall(call: CallRecord, c: ElConversation, opts: { re
     log("call", "📞 No answer: left a short voicemail");
     say(s, `call:end:${call.id}`, "📞 No answer. Left a short voicemail; I'll keep going by email.");
   } else {
-    log("call", `📞 Call done${parts.length ? `: ${parts.join(", ")}` : ""}`);
-    say(s, `call:end:${call.id}`, `📞 Call done${parts.length ? `: ${parts.join(", ")}.` : "."}${refused}`);
+    // No deal? Still tell the renter what happened, in one line (the call summary from ElevenLabs).
+    const gist = !parts.length && call.summary ? ` ${firstSentence(call.summary)}` : "";
+    log("call", `📞 Call done${parts.length ? `: ${parts.join(", ")}` : ""}${gist}`);
+    say(s, `call:end:${call.id}`, `📞 Call done${parts.length ? `: ${parts.join(", ")}.` : "."}${refused}${gist}`);
   }
 
   // Persist the essentials where every instance looks: a recap reply on the AgentMail thread (rebuilt by mailsync).

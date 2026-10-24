@@ -64,6 +64,16 @@ interface ElClient { Conversation: { startSession(o: { signedUrl: string; dynami
 const resetMark = () => { try { return localStorage.getItem("sniper-reset-at") ?? ""; } catch { return ""; } };
 const withMark = <X extends object>(snap: X | null) => ({ ...(snap ?? {}), resetAt: resetMark() });
 
+type CallLite = { id: string; status: string; transcript: unknown[] };
+function mergeCallLists<C extends CallLite>(a: C[] | undefined, b: C[] | undefined): C[] {
+  const out = new Map<string, C>();
+  for (const c of [...(a ?? []), ...(b ?? [])]) {
+    const o = out.get(c.id);
+    if (!o || (o.status === "calling" && c.status !== "calling") || (o.status === c.status && c.transcript.length > o.transcript.length)) out.set(c.id, c);
+  }
+  return [...out.values()];
+}
+
 async function post<T>(url: string, body?: unknown, timeoutMs = 60000): Promise<T> {
   const r = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body ?? {}), signal: AbortSignal.timeout(timeoutMs) });
   return (await r.json()) as T;
@@ -157,8 +167,10 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
   const adopt = useCallback((next: S | undefined) => {
     if (!next) return;
     const b = best.current;
-    if (b && (b.version ?? "") > (next.version ?? "")) { const merged = { ...b, threads: next.threads, modes: next.modes, autopilot: next.autopilot ?? b.autopilot }; best.current = merged; setS(merged); return; }
-    best.current = next; setS(next);
+    // A call can be known to only some instances: keep the most advanced copy of each call across responses.
+    const calls = mergeCallLists(b?.calls, next.calls);
+    if (b && (b.version ?? "") > (next.version ?? "")) { const merged = { ...b, threads: next.threads, modes: next.modes, autopilot: next.autopilot ?? b.autopilot, calls }; best.current = merged; setS(merged); return; }
+    best.current = { ...next, calls }; setS(best.current);
   }, []);
   const refresh = useCallback(async () => { const r = await fetch(`/api/state?resetAt=${encodeURIComponent(resetMark())}`, { cache: "no-store" }); adopt((await r.json()) as S); }, [adopt]);
   const call = useCallback(async <T,>(url: string, body: Record<string, unknown> = {}) => {

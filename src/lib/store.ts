@@ -108,12 +108,14 @@ export function hydrate(snap: unknown) {
   const x = snap as Partial<SessionSnapshot>;
   if (!Array.isArray(x.timeline) || !Array.isArray(x.chat) || !Array.isArray(x.results) || !Array.isArray(x.flagged) || !Array.isArray(x.approvals)) return;
   const s = state();
+  // Calls live on whichever instance started them: always merge the browser's copy so any instance can finish them.
+  s.calls = mergeCalls(s.calls, (snap as { calls?: unknown }).calls);
   if (version({ timeline: x.timeline, chat: x.chat }) <= version(s)) return;
   Object.assign(s, { criteria: x.criteria ?? null, results: x.results, flagged: x.flagged, timeline: x.timeline.slice(0, 200), approvals: x.approvals.slice(0, 50), chat: x.chat.slice(-60), searchReport: x.searchReport ?? null, events: Array.isArray(x.events) ? x.events : [], analyzedId: x.analyzedId ?? null, autopilot: sanitizeAutopilot(x.autopilot) ?? s.autopilot, calls: mergeCalls(s.calls, x.calls) });
 }
 
 /** Calls ride in the snapshot; a call this instance knows better (finished here) wins over the carried copy. */
-function mergeCalls(mine: CallRecord[], carried: unknown): CallRecord[] {
+export function mergeCalls(mine: CallRecord[], carried: unknown): CallRecord[] {
   if (!Array.isArray(carried)) return mine;
   const out = new Map<string, CallRecord>();
   for (const c of carried as CallRecord[]) if (c && typeof c.id === "string" && Array.isArray(c.transcript)) out.set(c.id, c);
