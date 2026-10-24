@@ -116,7 +116,7 @@ export function milestones(s: State): Milestone[] {
       if (!after(m.at, since)) { if (m.from === "agent") firstAgent = false; return; }
       if (m.from === "landlord") {
         const flags = detectRedFlags(stripQuoted(m.text));
-        if (flags.length) out.push({ key: `flag:${k}:${mid}`, text: `🚩 El dueño de ${name} ${flagEs(flags[0])}. Me negué: nada de plata antes de ver el lugar y firmar. Lo marqué en rojo, no tenés que hacer nada.` });
+        if (flags.length) out.push({ key: `flag:${k}:${mid}`, text: `🚩 El dueño de ${name} ${flagEs(flags[0])}. Me negué: nada de plata antes de ver el lugar y firmar. ${flags.some((f) => /out of the country|wire|gift cards|keys by mail/i.test(f)) ? "Lo marqué en rojo y lo descarto." : "Si afloja, sigo negociando; vos no tenés que hacer nada."}` });
         return;
       }
       if (m.from !== "agent") return;
@@ -194,28 +194,34 @@ export function autopilotView(s: State): AutopilotView {
   const name = (t: Thread) => `"${short(t.listingTitle)}"`;
   const v = (stage: AutopilotStage, now: string, next: string): AutopilotView => ({ ...base, stage, now, next });
 
-  if (!s.criteria && !s.results.length) return v(ap.on ? "idle" : ap.decided ? "paused" : "idle", "Esperando que me digas qué buscás.", "Decime zona, presupuesto y fechas. Yo busco, filtro estafas, hablo con los dueños y te agendo la visita.");
-  if (ny.some((x) => x.kind === "autopilot_consent")) return v("consent", `Encontré ${s.results.length} lugares seguros y bloqueé ${s.flagged.length} estafas.`, "¿Me encargo de todo? Escribo, negocio, pido pruebas y agendo. Solo te pido que mandes los mensajes de Craigslist.");
-  if (!ap.on) return v("paused", "Piloto automático apagado: te pido aprobación en cada paso.", "Activalo y me encargo de escribir, negociar y agendar por vos.");
+  if (!s.criteria && !s.results.length) return v(ap.on ? "idle" : ap.decided ? "paused" : "idle", "Waiting for you to tell me what you need.", "Say the area, budget and dates. I search, filter scams, talk to landlords and book the viewing.");
+  if (ny.some((x) => x.kind === "autopilot_consent")) return v("consent", `Found ${s.results.length} safe places and blocked ${s.flagged.length} scams.`, "Waiting for your OK to handle it end to end: email, negotiate, ask for proof and book.");
+  if (!ap.on) return v("paused", "Autopilot is off: I ask before every step.", "Turn it on and I email, negotiate and book for you.");
   const booked = threads.find((t) => t.status === "booked") ?? (s.events.length ? threads[0] : undefined);
   if (booked || s.events.length) {
     const ev = s.events[0];
-    return v("booked", `Visita agendada${ev ? ` ${esWhen(fmtLA(ev.start)) ?? ""}` : ""}${booked ? ` para ${name(booked)}` : ""}.`, "Ir a la visita con tu ID. No pagues nada antes de ver el lugar y firmar el contrato.");
+    return v("booked", `Viewing booked${ev ? `, ${fmtLA(ev.start)}` : ""}${booked ? `, ${name(booked)}` : ""}.`, "Go see it with your ID. Pay nothing until you see the place and sign.");
   }
   const toConfirm = live.find((t) => bookingApproval(s, t));
-  if (toConfirm) return v("scheduling", `El dueño de ${name(toConfirm)} aceptó un horario.`, "Confirmá la visita y la agendo en tu calendario.");
+  if (toConfirm) return v("scheduling", `The landlord of ${name(toConfirm)} accepted a time.`, "Confirm and I put it on your calendar.");
   const proposed = live.find((t) => t.status === "viewing_proposed");
-  if (proposed) return v("scheduling", `Le propuse horarios al dueño de ${name(proposed)}; espero que elija uno.`, "Apenas elija, la agendo en tu calendario y le confirmo por mail.");
+  if (proposed) return v("scheduling", `Offered viewing times to the landlord of ${name(proposed)}.`, "As soon as they pick one, I book it and confirm by email.");
   const talking = live.find((t) => t.status === "active");
   if (talking) {
     const d = dealOf(talking);
-    return v("negotiating", d?.offered && d.agreed == null ? `Negociando con el dueño de ${name(talking)}: le ofrecí ${usd(d.offered)}/mes.` : `Hablando con el dueño de ${name(talking)}.`,
-      "Pido video en vivo y prueba de que es el titular, y agendo la primera visita libre.");
+    return v("negotiating", d?.offered && d.agreed == null ? `Negotiating with the landlord of ${name(talking)}: offered ${usd(d.offered)}/mo.` : `Talking with the landlord of ${name(talking)}.`,
+      "Ask for a live video tour and leaseholder proof, then book the first free slot.");
   }
   const waiting = live.filter((t) => t.status === "awaiting_landlord");
-  if (waiting.length) return v("waiting", `Esperando respuesta ${waiting.length === 1 ? `del dueño de ${name(waiting[0])}` : `de ${waiting.length} dueños`}.`,
-    `Cuando respondan, negocio el precio (tope ${usd(s.profile.maxBudget)}), pido pruebas y agendo la visita.`);
-  if (stats.craigslistDrafts) return v("outreach", `Preparé ${stats.craigslistDrafts} mensajes para avisos de Craigslist.`, "Abrí cada aviso y tocá Reply; cuando el dueño te conteste, seguimos.");
-  if (threads.some((t) => t.status === "flagged")) return v("outreach", "Descarté al dueño que pidió plata antes de la visita.", "Decime si amplío la búsqueda (zona o presupuesto) y sigo buscando.");
-  return v("outreach", `Tengo ${s.results.length} opciones seguras.`, "Les escribo a los mejores apenas me digas.");
+  if (waiting.length) return v("waiting", `Waiting on ${waiting.length === 1 ? `the landlord of ${name(waiting[0])}` : `${waiting.length} landlords`} (checking mail live).`,
+    `When they reply: negotiate under ${usd(s.profile.maxBudget)}, ask for proof, book the viewing.`);
+  const refused = threads.find((t) => t.status === "flagged" && t.messages[t.messages.length - 1]?.from === "agent");
+  if (refused) {
+    const d = dealOf(refused);
+    return v("negotiating", `Refused money before a viewing${d?.offered ? ` and countered ${usd(d.offered)}/mo` : ""}. Waiting on the landlord of ${name(refused)}.`,
+      "If they drop the deposit, I book the viewing. If not, I walk away.");
+  }
+  if (stats.craigslistDrafts) return v("outreach", `Drafted ${stats.craigslistDrafts} replies for Craigslist listings.`, "Open each listing and click Reply; I take it from there.");
+  if (threads.some((t) => t.status === "flagged")) return v("outreach", "Dropped the landlord who asked for money before a viewing.", "Tell me if I should widen the search (area or budget).");
+  return v("outreach", `${s.results.length} safe options ready.`, "I email the best ones as soon as you say go.");
 }

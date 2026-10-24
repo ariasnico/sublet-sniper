@@ -52,7 +52,7 @@ describe("autopilot end to end (mock LLM, mail, calendar)", () => {
     expect(drafts.length).toBeGreaterThan(0);
     expect(cl[0].kind === "craigslist_replies" && cl[0].items.every((i) => /craigslist\.org/.test(i.url) && i.message.length > 50)).toBe(true);
     expect(view.stage).toBe("waiting");
-    expect(view.now).toMatch(/Esperando respuesta/);
+    expect(view.now).toMatch(/Waiting on the landlord/);
     expect(autoText()).toMatch(/Le escribí al dueño de "Furnished 1BR sublet near Caltrain"/);
     expect(autoText()).toMatch(/Craigslist/);
 
@@ -163,4 +163,29 @@ describe("autopilot safety", () => {
     expect(await resolveApproval(d.id, true)).toMatchObject({ ok: true, openUrl: base.url });
     expect(sent).toEqual([]);
   }, 30000);
+});
+
+describe("landlord red-flag severity (demo story)", () => {
+  beforeEach(() => { resetState(); sent.length = 0; });
+  const start = async () => {
+    await chat(SEARCH);
+    const consent = state().approvals.find((a) => a.kind === "autopilot_consent")!;
+    await resolveApproval(consent.id, true, "Yes, go");
+    const t = state().threads[0];
+    return { t, l: () => [...state().results, ...state().flagged].find((x) => x.id === t.listingId)! };
+  };
+  it("a Zelle deposit ask is refused but only cautions the listing; backing down still books", async () => {
+    const { t, l } = await start();
+    await handleInbound({ from: t.landlordEmail, text: "It's $3,800/mo. Can you Zelle a $7,600 deposit today to hold it?", messageId: "m1" });
+    expect(l().scam.light).toBe("yellow");
+    expect(autopilotView(state()).now).toMatch(/Refused money before a viewing and countered \$3,600/);
+    await handleInbound({ from: t.landlordEmail, text: "Ok fair, no deposit until you see it. $3,600 works. Video tour Monday after 5pm?", messageId: "m2" });
+    expect(state().threads[0].status).toBe("booked");
+    expect(l().scam.light).toBe("yellow");
+  });
+  it("the out-of-the-country script turns the listing red", async () => {
+    const { t, l } = await start();
+    await handleInbound({ from: t.landlordEmail, text: "I'm out of the country, wire the deposit and I'll mail the keys.", messageId: "m3" });
+    expect(l().scam.light).toBe("red");
+  });
 });

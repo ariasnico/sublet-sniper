@@ -376,6 +376,7 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
     return lid ? mapListings.find((l) => l.id === lid) : undefined;
   };
 
+  const needCards = needs.map((n) => <NeedCard key={n.key} n={n} listingOf={listingOf} onApprove={(id, ok, ans) => void approve(id, ok, ans)} onPaste={openAndPaste} />);
   return (
     <>
       {elevenLabsAgentId && <Script src="https://unpkg.com/@elevenlabs/convai-widget-embed" strategy="afterInteractive" />}
@@ -489,7 +490,8 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
               <span>Simulate landlord</span>
               {["hello", "video", "slot", "scam"].map((p) => <button key={p} className="ghost xs" onClick={() => void landlord(p)}>{p}</button>)}</div>}
             <div className="scroll">
-              {needs.map((n) => <NeedCard key={n.key} n={n} listingOf={listingOf} onApprove={(id, ok, ans) => void approve(id, ok, ans)} onPaste={openAndPaste} />)}
+              {/* Once a viewing is booked it is the headline; leftover asks go below it. */}
+              {!events.length && needCards}
               {events.map((e) => {
                 const d = new Date(e.start);
                 return <div key={e.id} className="ticket-card">
@@ -500,6 +502,7 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
                       <a href={icsHref(e)} download="viewing.ics">Download .ics</a></div></div>
                 </div>;
               })}
+              {events.length > 0 && needCards}
               <Inbox threads={threads} listings={mapListings} />
               {dealsEmpty && <div className="empty deals-empty">
                 <svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true"><path d="M4 6.5h16v11H4z M4 7l8 6 8-6" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" /></svg>

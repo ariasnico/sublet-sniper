@@ -387,8 +387,16 @@ export async function handleInbound(m: { from: string; text: string; messageId?:
   if (plan.intent === "safety") {
     if (!wasBooked) t.status = "flagged";
     const l = findListing(t.listingId);
-    if (l) { l.scam = { light: "red", score: Math.max(l.scam.score, 80), reasons: [...flags.map((f) => `Landlord email: ${f}`), ...l.scam.reasons] }; }
-    log("flag", `RED FLAG in landlord email: ${flags.join("; ")}. Refused and flagged.`);
+    // Severity: the classic scam script (away abroad, wire, gift cards, keys by mail) is red. A pushy deposit/Zelle
+    // ask alone is caution: refused, and the deal can continue if the landlord backs down.
+    const severe = flags.some((f) => /out of the country|wire|gift cards|keys by mail/i.test(f));
+    if (l) {
+      const reasons = [...flags.map((f) => `Landlord email: ${f}`), ...l.scam.reasons.filter((r) => !r.startsWith("Landlord email:"))];
+      l.scam = severe || l.scam.light === "red"
+        ? { light: "red", score: Math.max(l.scam.score, 80), reasons, signals: l.scam.signals }
+        : { light: "yellow", score: Math.min(49, Math.max(l.scam.score, 35)), reasons, signals: l.scam.signals };
+    }
+    log("flag", `${severe ? "RED FLAG" : "Caution"} in landlord email: ${flags.join("; ")}. Refused${severe ? " and flagged" : ""}.`);
     // Autopilot decides this itself (refuse, mark red, keep no-payment stance); otherwise ask the owner.
     if (!s.autopilot.on) toolAsk({ question: `"${t.listingTitle}" landlord asked for money before a viewing (${flags[0]}). Drop this listing?`, options: ["Drop it", "Keep talking (no payment)"] });
   } else if (plan.proposeSlots) {
