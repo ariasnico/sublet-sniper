@@ -28,7 +28,7 @@ export function followUpsFor(x: FollowUpInput): FollowUp[] {
   const booked = x.events.length > 0 || x.stage === "booked" || x.threads.some((t) => t.status === "booked");
   const scams: FollowUp = x.flagged.length ? { label: "Show me the scams you blocked", tab: "flagged" } : { label: SCAM_HOW };
   if (booked) return [{ label: "Add the viewing to my calendar" }, { label: "What should I bring to the viewing?" }, { label: "How much did you save me?" }];
-  if (x.consentPending) return [{ label: "Yes, handle it end to end", consent: true }, scams, { label: "Why is #1 the best?" }];
+  if (x.consentPending) return [{ label: "Why is #1 the best?" }, scams]; // the consent itself is the buttons above
   const talking = x.threads.length > 0 || ["outreach", "waiting", "negotiating", "scheduling"].includes(x.stage ?? "");
   if (talking) return [{ label: "What did you tell the landlord?" }, { label: "Check a Craigslist link", prefill: "Check this listing: " }, { label: "How is the negotiation going?" }];
   const top = x.results[0];

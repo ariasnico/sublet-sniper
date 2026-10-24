@@ -91,6 +91,13 @@ function Actions({ text, id, canRetry, onRetry, vote, setVote }: { text: string;
   </div>;
 }
 
+/** The full autopilot narration, oldest first (shown in the Activity tab). */
+export function Narration({ chat }: { chat: ChatMsg[] }) {
+  const lines = chat.filter((m) => m.role === "assistant" && m.auto).flatMap((m) => m.text.split("\n").filter((l) => l.trim()));
+  if (!lines.length) return null;
+  return <ul className="c-status narr">{lines.map((l, i) => <StatusLine key={i} line={l} />)}</ul>;
+}
+
 export interface ChatThreadProps {
   chat: ChatMsg[];
   greeting: string;
@@ -127,10 +134,12 @@ export function ChatThread({ chat, greeting, typing, idle, consent, followUps, o
       const first = blocks[k - 1]?.kind !== "agent" && blocks[k - 1]?.kind !== "status";
       if (b.kind === "user") return <div key={b.i} className="c-row c-user-row"><div className="c-user">{b.m.text}</div></div>;
       if (b.kind === "agent") return row(first, <div className="c-agent"><Rich text={b.m.text} /></div>, b.i);
-      return row(first, <div className="c-status" role="group" aria-label="Autopilot updates">
-        <div className="c-status-k"><i aria-hidden="true" />Autopilot</div>
-        <ul>{b.ms.flatMap((m, j) => m.text.split("\n").filter((l) => l.trim()).map((l, n) => <StatusLine key={`${j}-${n}`} line={l} />))}</ul>
-      </div>, b.i, " c-strow");
+      // The narration log lives in Activity; the chat keeps only the newest autopilot line, and only while it is the latest beat.
+      if (k !== blocks.length - 1) return null;
+      const latest = b.ms.flatMap((m) => m.text.split("\n").filter((l) => l.trim())).at(-1);
+      return latest ? row(first, <div className="c-status" role="status" aria-label="Latest autopilot update">
+        <ul><StatusLine key={latest} line={latest} /></ul>
+      </div>, b.i, " c-strow") : null;
     })}
     {typing && row(!endsWithAgent || chat.length === 0, <div className="c-typing" aria-label="Your agent is typing"><i /><i /><i /></div>, "typing")}
     {showTail && <div className="c-tail">
@@ -139,7 +148,7 @@ export function ChatThread({ chat, greeting, typing, idle, consent, followUps, o
       </div>}
       {chat.length > 0 && <Actions text={runText} id={run[run.length - 1]?.at ?? "x"} canRetry={!!lastUser} onRetry={() => lastUser && onRetry(lastUser.text)} vote={vote} setVote={setVote} />}
       {followUps.length > 0 && <ul className="c-follow" aria-label="Suggested follow-ups">
-        {followUps.map((f, k) => <li key={f.label} style={{ "--i": k } as React.CSSProperties}>
+        {followUps.slice(0, 2).map((f, k) => <li key={f.label} style={{ "--i": k } as React.CSSProperties}>
           <button type="button" className="c-fu" onClick={() => onFollowUp(f)}><span className="c-fu-ico">{I.arrow}</span><span>{f.label}</span></button>
         </li>)}
       </ul>}
