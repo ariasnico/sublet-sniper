@@ -1,9 +1,9 @@
 import { mailLive } from "./config";
 
 const BASE = "https://api.agentmail.to/v0";
-const inbox = () => process.env.AGENTMAIL_INBOX_ID ?? "";
+export const inboxId = () => process.env.AGENTMAIL_INBOX_ID ?? "";
 
-async function am(path: string, init: RequestInit = {}): Promise<Record<string, unknown>> {
+export async function am(path: string, init: RequestInit = {}): Promise<Record<string, unknown>> {
   const res = await fetch(`${BASE}${path}`, { ...init, headers: { authorization: `Bearer ${process.env.AGENTMAIL_API_KEY ?? ""}`, "content-type": "application/json" }, signal: AbortSignal.timeout(20000) });
   const j: unknown = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(`AgentMail ${res.status}`);
@@ -15,7 +15,7 @@ export interface SentMail { mode: "agentmail" | "mock"; messageId: string; threa
 /** Sends from the agent inbox. Mock mode only records it. Callers must enforce the approval/allowlist rule. */
 export async function sendMail(to: string, subject: string, text: string, replyToMessageId?: string): Promise<SentMail> {
   if (!mailLive()) return { mode: "mock", messageId: `mock-${Date.now()}`, threadId: `mock-thread-${to}` };
-  const enc = encodeURIComponent(inbox());
+  const enc = encodeURIComponent(inboxId());
   const r = replyToMessageId
     ? await am(`/inboxes/${enc}/messages/${encodeURIComponent(replyToMessageId)}/reply`, { method: "POST", body: JSON.stringify({ text }) })
     : await am(`/inboxes/${enc}/messages/send`, { method: "POST", body: JSON.stringify({ to: [to], subject, text }) });
@@ -37,10 +37,10 @@ export function parseInbound(m: Record<string, unknown>): InboundMail {
 /** Polls recent inbound messages (used when no public webhook URL is available, e.g. localhost). */
 export async function listInbound(seen: Set<string> = new Set(), limit = 20): Promise<InboundMail[]> {
   if (!mailLive()) return [];
-  const enc = encodeURIComponent(inbox());
+  const enc = encodeURIComponent(inboxId());
   const r = await am(`/inboxes/${enc}/messages?limit=${limit}&labels=received`);
   const msgs = (Array.isArray(r.messages) ? r.messages : []) as Record<string, unknown>[];
-  const own = inbox().toLowerCase();
+  const own = inboxId().toLowerCase();
   const out: InboundMail[] = [];
   for (const m of msgs) {
     const labels = Array.isArray(m.labels) ? m.labels.map(String) : [];

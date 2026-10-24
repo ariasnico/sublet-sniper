@@ -4,6 +4,7 @@ import { llmNormalize } from "./llm-normalize";
 import { llmProvider } from "./config";
 import { proposeSlots, bookViewing, type Slot } from "./calendar";
 import { sendMail } from "./mail";
+import { syncThreads } from "./mailsync";
 import { emailAllowed, firstContact, planReply, writeReply, detectRedFlags } from "./landlord";
 import { fmtLA } from "./time";
 import { findListing, log, now, state, uid, type Approval, type Thread } from "./store";
@@ -120,7 +121,7 @@ function toolBookRequest(input: Record<string, unknown>) {
 
 export function requestBooking(t: Thread, slot: Slot) {
   const s = state();
-  const a: Approval = { id: uid("ap"), at: now(), kind: "book_viewing", listingId: t.listingId, title: `Book viewing: ${t.listingTitle}`, body: `${fmtLA(slot.start)} with ${t.landlordEmail}`, status: "pending", payload: { threadId: t.id, slot } };
+  const a: Approval = { id: uid("ap"), at: now(), kind: "book_viewing", listingId: t.listingId, title: `Book viewing: ${t.listingTitle}`, body: `${fmtLA(slot.start)} with ${t.landlordEmail}`, status: "pending", payload: { threadId: t.id, amThreadId: t.agentmailThreadId, slot } };
   s.approvals.unshift(a);
   log("decision", `Landlord accepted ${fmtLA(slot.start)}. Asking you to confirm the booking.`);
   return { approvalId: a.id };
@@ -157,8 +158,11 @@ export async function execTool(name: string, input: Record<string, unknown>): Pr
 }
 
 // ---------------- approvals ----------------
-export async function resolveApproval(id: string, approve: boolean, answer?: string) {
+export async function resolveApproval(id: string, approve: boolean, answer?: string, carried?: Approval) {
   const s = state();
+  // Serverless: the approval may have been created on another instance; the client carries it back.
+  // Safety rules (allowlist, Craigslist human-send) are re-checked below regardless of origin.
+  if (carried && carried.id === id && !s.approvals.some((x) => x.id === id)) s.approvals.unshift({ ...carried, status: "pending" });
   const a = s.approvals.find((x) => x.id === id);
   if (!a || a.status !== "pending") return { error: "not pending" };
   if (a.kind === "decision") { a.status = "answered"; a.answer = answer ?? (approve ? "Yes" : "No"); log("decision", `You answered "${a.title}": ${a.answer}`); return { ok: true }; }
@@ -175,13 +179,15 @@ export async function resolveApproval(id: string, approve: boolean, answer?: str
       const l = a.listingId ? findListing(a.listingId) : undefined;
       const sent = await sendMail(to, String(payload.subject), a.body);
       const t: Thread = { id: uid("th"), listingId: a.listingId ?? "", listingTitle: l?.title ?? "listing", landlordEmail: to, subject: String(payload.subject),
-        messages: [{ from: "agent", text: a.body, at: now() }], status: "awaiting_landlord", agentmailThreadId: sent.threadId, lastMessageId: sent.messageId, askedProof: true };
+        messages: [{ id: sent.messageId, from: "agent", text: a.body, at: now() }], status: "awaiting_landlord", agentmailThreadId: sent.threadId, lastMessageId: sent.messageId, askedProof: true };
       s.threads.unshift(t);
       log("email_out", `Emailed ${to} (${sent.mode}) about "${t.listingTitle}"`);
       return { ok: true, threadId: t.id };
     }
     case "book_viewing": {
-      const t = s.threads.find((x) => x.id === payload.threadId);
+      const find = () => s.threads.find((x) => x.id === payload.threadId || (!!payload.amThreadId && x.agentmailThreadId === payload.amThreadId));
+      if (!find()) await syncThreads(true).catch(() => []);
+      const t = find();
       const slot = payload.slot as Slot;
       if (!t) return { error: "thread gone" };
       const ev = await bookViewing(slot, `Viewing: ${t.listingTitle}`, `Booked by Sublet Sniper. Landlord: ${t.landlordEmail}. Bring ID; pay nothing before seeing the unit and signing.`, [t.landlordEmail]);
@@ -208,7 +214,9 @@ export async function handleInbound(m: { from: string; text: string; messageId?:
   const t = s.threads.find((x) => (m.threadId && x.agentmailThreadId === m.threadId) || x.landlordEmail === m.from.toLowerCase());
   if (!t) { log("email_in", `Ignored email from unknown sender ${m.from}`); return { skipped: "unknown sender" }; }
   const flags = detectRedFlags(m.text);
-  t.messages.push({ from: "landlord", text: m.text, at: now(), flagged: flags.length ? flags : undefined });
+  const known = m.messageId ? t.messages.find((x) => x.id === m.messageId) : undefined;
+  if (known) known.flagged = flags.length ? flags : undefined;
+  else t.messages.push({ id: m.messageId, from: "landlord", text: m.text, at: now(), flagged: flags.length ? flags : undefined });
   if (m.messageId) t.lastMessageId = m.messageId;
   log("email_in", `Landlord replied on "${t.listingTitle}"`);
   if (!emailAllowed(t.landlordEmail)) { toolAsk({ question: `New reply on "${t.listingTitle}". Want me to answer?`, options: ["Yes", "No"] }); return { ok: true, autoReply: false }; }
@@ -231,6 +239,7 @@ export async function handleInbound(m: { from: string; text: string; messageId?:
   t.askedProof = plan.askedProof;
   const sent = await sendMail(t.landlordEmail, t.subject, text, t.lastMessageId);
   t.messages.push({ from: "agent", text, at: now() });
+  t.messages[t.messages.length - 1].id = sent.messageId;
   log("email_out", `Replied to landlord (${sent.mode}): ${plan.intent}`);
   return { ok: true, intent: plan.intent };
 }

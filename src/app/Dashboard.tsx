@@ -73,7 +73,8 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
     recRef.current = rec; setListening(true); rec.start();
   };
   const approve = async (id: string, ok: boolean, answer?: string) => {
-    const r = await post<{ openUrl?: string; error?: string }>("/api/approve", { id, approve: ok, answer });
+    const approval = s?.approvals.find((x) => x.id === id);
+    const r = await post<{ openUrl?: string; error?: string }>("/api/approve", { id, approve: ok, answer, approval });
     if (r.openUrl) window.open(r.openUrl, "_blank", "noopener");
     if (r.error) alert(r.error);
     void refresh();

@@ -7,7 +7,7 @@ export interface Approval {
   id: string; at: string; kind: ApprovalKind; listingId?: string; title: string; body: string;
   options?: string[]; payload?: Record<string, unknown>; status: "pending" | "approved" | "rejected" | "answered"; answer?: string;
 }
-export interface ThreadMsg { from: "agent" | "landlord" | "system"; text: string; at: string; flagged?: string[] }
+export interface ThreadMsg { id?: string; from: "agent" | "landlord" | "system"; text: string; at: string; flagged?: string[] }
 export interface Thread {
   id: string; listingId: string; listingTitle: string; landlordEmail: string; subject: string;
   messages: ThreadMsg[]; status: "awaiting_landlord" | "active" | "viewing_proposed" | "booked" | "flagged";
