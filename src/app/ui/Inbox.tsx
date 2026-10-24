@@ -24,6 +24,18 @@ function protocol(t: Thread, l?: RankedListing): Check[] {
   ];
 }
 
+const money = (t: string) => [...t.replace(/,/g, "").matchAll(/\$\s?(\d{3,5})(?!\d)/g)].map((m) => Number(m[1]));
+/** Price negotiation read from the thread itself: what was listed, what the landlord asked, what the agent offered. */
+export function deal(t: Thread, l?: RankedListing) {
+  let asked: number | null = null, offered: number | null = null;
+  for (const m of t.messages) {
+    if (m.from === "landlord" && !m.flagged) { const a = money(m.text).filter((x) => x >= 500 && x < 20000); if (a.length) { asked = a[0]; offered = null; } }
+    if (m.from === "agent" && asked) { const o = m.text.replace(/,/g, "").match(/would you do \$(\d{3,5})|(?:offer|counter)[^$]{0,20}\$(\d{3,5})/i); const below = money(m.text).filter((x) => x < asked! && x >= 500); if (o) offered = Number(o[1] ?? o[2]); else if (below.length) offered = Math.min(...below); }
+  }
+  if (!asked) return null;
+  return { listed: l?.priceMonthly ?? null, asked, offered };
+}
+
 function Typed({ text, live }: { text: string; live: boolean }) {
   const [n, setN] = useState(live ? 0 : text.length);
   useEffect(() => {
@@ -71,6 +83,13 @@ function ThreadCard({ t, inbox, listing }: { t: Thread; inbox?: string; listing?
         {protocol(t, listing).map((c) => <li key={c.k} className={c.state}>
           <i aria-hidden="true">{c.state === "ok" ? "✓" : c.state === "blocked" ? "!" : ""}</i>{c.k}</li>)}
       </ul>
+      {(() => { const d = deal(t, listing); if (!d) return null; const save = d.offered ? d.asked - d.offered : 0; return (
+        <div className="deal">
+          {d.listed && <div><span>Listed</span><b>${d.listed.toLocaleString("en-US")}</b></div>}
+          <div className="asked"><span>They asked</span><b>${d.asked.toLocaleString("en-US")}</b></div>
+          <div className={d.offered ? "offer" : "pending"}><span>Agent offered</span><b>{d.offered ? `$${d.offered.toLocaleString("en-US")}` : "…"}</b></div>
+          {save > 0 && <div className="save"><span>You save</span><b>${save.toLocaleString("en-US")}/mo</b></div>}
+        </div>); })()}
       {t.messages.length > 3 && <button className="th-more" onClick={() => setAll(!all)}>{all ? "Show latest only" : `Show ${t.messages.length - 3} earlier`}</button>}
       <div className="th-msgs">
         {msgs.map((x, i) => <Bubble key={x.id ?? `${x.at}-${i}`} x={x} />)}

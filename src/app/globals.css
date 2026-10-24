@@ -436,3 +436,14 @@ input[type="checkbox"] { width: auto; accent-color: var(--accent); box-shadow: n
 @keyframes wave { 0% { transform: scaleY(.15); } 50% { transform: scaleY(.85); } 100% { transform: scaleY(.3); } }
 .wave i:nth-child(3n) { animation-duration: 700ms; } .wave i:nth-child(4n+1) { animation-duration: 1100ms; }
 @media (prefers-reduced-motion: reduce) { .listen.on .wave i { animation: none; transform: scaleY(.5); } }
+
+/* ── negotiation ───────────────────────────────────── */
+.deal { display: flex; gap: 0; margin: 0 0 10px; border-radius: 12px; overflow: hidden; box-shadow: 0 0 0 1px var(--line); }
+.deal > div { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 7px 10px; background: var(--panel); }
+.deal > div + div { box-shadow: -1px 0 0 var(--line); }
+.deal span { font-size: 10.5px; color: var(--faint); font-weight: 600; white-space: nowrap; }
+.deal b { font-size: 15px; font-weight: 750; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.deal .asked b { color: var(--mute); text-decoration: line-through; text-decoration-color: rgba(185,28,28,.5); text-decoration-thickness: 2px; }
+.deal .offer { background: var(--accent-soft); } .deal .offer b { color: var(--accent-strong); }
+.deal .pending b { color: var(--faint); }
+.deal .save { background: var(--green-soft); } .deal .save b { color: var(--green); animation: bump 600ms 200ms var(--ease-out) both; }
