@@ -71,7 +71,8 @@ function agentBody(toolIds, withDataCollection = true) {
         language: "en", first_message: FIRST_MESSAGE, disable_first_message_interruptions: true,
         dynamic_variables: { dynamic_variable_placeholders: PLACEHOLDERS },
         prompt: {
-          prompt: PROMPT, llm: process.env.ELEVENLABS_LLM || "gpt-4.1", temperature: 0.3, tool_ids: toolIds,
+          // Voice needs speed + strict instruction-following: newest Haiku with no extended reasoning.
+          prompt: PROMPT, llm: process.env.ELEVENLABS_LLM || "claude-haiku-5-5", reasoning_effort: process.env.ELEVENLABS_REASONING || "none", temperature: 0.3, tool_ids: toolIds,
           built_in_tools: {
             end_call: { type: "system", name: "end_call", description: "", params: { system_tool_type: "end_call" } },
             voicemail_detection: { type: "system", name: "voicemail_detection", description: "", params: { system_tool_type: "voicemail_detection",
