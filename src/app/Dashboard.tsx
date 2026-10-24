@@ -1,6 +1,7 @@
 "use client";
 import { createElement, useCallback, useEffect, useRef, useState } from "react";
 import Script from "next/script";
+import { Toaster, toast } from "sonner";
 import type { RankedListing } from "@/lib/types";
 import type { Approval, ChatMsg, Thread, TimelineItem } from "@/lib/store";
 
@@ -64,6 +65,20 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
     const id = setInterval(() => { void call("/api/mail/poll"); }, 15000);
     return () => clearInterval(id);
   }, [mailLive, call]);
+  // Toast every new agent action exactly once.
+  const seenTl = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    const tl = s?.timeline ?? [];
+    if (!seenTl.current) { seenTl.current = new Set(tl.map((t) => t.id)); return; }
+    for (const t of [...tl].reverse()) {
+      if (seenTl.current.has(t.id)) continue;
+      seenTl.current.add(t.id);
+      if (t.kind === "email_out") toast.success("Email sent", { description: t.text });
+      else if (t.kind === "email_in") toast("📩 Landlord replied", { description: t.text });
+      else if (t.kind === "calendar" && /^Booked/.test(t.text)) toast.success("✅ Viewing booked", { description: t.text });
+      else if (t.kind === "flag") toast.error("🚩 Scam blocked", { description: t.text });
+    }
+  }, [s?.timeline]);
   useEffect(() => { chatEnd.current?.scrollIntoView({ behavior: "smooth" }); }, [s?.chat.length]);
 
   const say = (text: string) => {
@@ -100,6 +115,7 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
   return (
     <>
       {elevenLabsAgentId && <Script src="https://unpkg.com/@elevenlabs/convai-widget-embed" strategy="afterInteractive" />}
+      <Toaster position="top-right" richColors theme="dark" closeButton />
       <div className="top">
         <h1>🎯 Sublet Sniper</h1>
         {m && <>
@@ -137,7 +153,7 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
             {elevenLabsAgentId && createElement("elevenlabs-convai", { "agent-id": elevenLabsAgentId })}
           </div>
           <div className="panel" style={{ maxHeight: "34%" }}>
-            <h2>Timeline</h2>
+            <h2><span className="live-dot" />Live activity</h2>
             <div className="scroll">{s?.timeline.map((t) => <div key={t.id} className={`tl ${t.kind}`}><span className="k">{t.kind}</span>{t.text}<div className="m" style={{ color: "var(--mute)" }}>{fmt(t.at)}</div></div>)}</div>
           </div>
         </div>

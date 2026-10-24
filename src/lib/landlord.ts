@@ -124,7 +124,7 @@ export function planReply(text: string, thread: Thread, p: RenterProfile, slots:
     case "pick_slot": {
       const slot = pickSlot(text, thread.offeredSlots?.map((s) => JSON.parse(s) as Slot));
       return { intent, flags, proposeSlots: false, slot, askedProof: thread.askedProof, text:
-        `Great, ${slot ? fmtLA(slot.start) : "that time"} works. I'm confirming it on my calendar now. Please send the exact address and unit number, and your full name so I know who to ask for.${sign}` };
+        `Great, ${slot ? fmtLA(slot.start) : "that time"} works, it's on my calendar. Please send the exact address and unit number, and your full name so I know who to ask for.${sign}` };
     }
     case "landlord_time": {
       const video = /\b(video|facetime|zoom|call)\b/i.test(text);
@@ -161,7 +161,14 @@ export function planReply(text: string, thread: Thread, p: RenterProfile, slots:
 export async function writeReply(plan: ReplyPlan, landlordText: string, p: RenterProfile): Promise<string> {
   if (plan.intent === "safety" || plan.intent === "pick_slot" || plan.intent === "landlord_time" || plan.proposeSlots) return plan.text;
   const out = await complete(
-    `You write short, warm, plain emails from a renter (${p.name}) to a sublet landlord. Keep every fact and decision from the DRAFT (budget cap $${p.maxBudget}/mo, the request for a live video walkthrough/proof). Never agree to pay anything before an in-person or live-video viewing and a written sublease. Answer the landlord's questions from this profile only: ${JSON.stringify(p)}. Output only the email body.`,
+    `You write short, warm, plain emails from a renter (${p.name}) to a sublet landlord. Keep every fact and decision from the DRAFT (budget cap $${p.maxBudget}/mo, the request for a live video walkthrough/proof). Never agree to pay anything before an in-person or live-video viewing and a written sublease. Answer the landlord's questions from this profile only: ${JSON.stringify(p)}. Keep it under 90 words, natural, no placeholders. Do not sign; the signature is added for you. Output only the email body.`,
     `LANDLORD SAID:\n${landlordText}\n\nDRAFT:\n${plan.text}`).catch(() => null);
-  return out?.trim() || plan.text;
+  return out?.trim() ? withSignature(out, p.name) : plan.text;
+}
+
+/** Ensures exactly one sign-off with the renter's name, whatever the LLM wrote. */
+export function withSignature(body: string, name: string): string {
+  const lines = body.trim().split("\n");
+  while (lines.length && /^(best|thanks|thank you|cheers|regards|best regards|sincerely|warmly|-+)?[,!.]?\s*$|^\s*\[?(your name|name)\]?\s*$/i.test(lines[lines.length - 1]) || (lines.length && lines[lines.length - 1].trim() === name)) lines.pop();
+  return `${lines.join("\n").trim()}\n\nBest,\n${name}`;
 }

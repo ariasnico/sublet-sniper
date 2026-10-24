@@ -119,6 +119,16 @@ function toolBookRequest(input: Record<string, unknown>) {
   return requestBooking(t, { start, end: new Date(Date.parse(start) + 45 * 60000).toISOString() });
 }
 
+/** Books the viewing on the (mock or Google) calendar. Sends no email: the caller's reply is the single confirmation. */
+export async function bookOnCalendar(t: Thread, slot: Slot) {
+  const s = state();
+  const ev = await bookViewing(slot, `Viewing: ${t.listingTitle}`, `Booked by Sublet Sniper. Landlord: ${t.landlordEmail}. Bring ID; pay nothing before seeing the unit and signing.`, [t.landlordEmail]);
+  s.events.unshift({ id: ev.id, title: `Viewing: ${t.listingTitle}`, start: slot.start, end: slot.end, link: ev.link });
+  t.status = "booked";
+  log("calendar", `Booked ${fmtLA(slot.start)} on ${ev.mode === "google" ? "Google Calendar" : "mock calendar"}`);
+  return ev;
+}
+
 export function requestBooking(t: Thread, slot: Slot) {
   const s = state();
   const a: Approval = { id: uid("ap"), at: now(), kind: "book_viewing", listingId: t.listingId, title: `Book viewing: ${t.listingTitle}`, body: `${fmtLA(slot.start)} with ${t.landlordEmail}`, status: "pending", payload: { threadId: t.id, amThreadId: t.agentmailThreadId, slot } };
@@ -190,10 +200,7 @@ export async function resolveApproval(id: string, approve: boolean, answer?: str
       const t = find();
       const slot = payload.slot as Slot;
       if (!t) return { error: "thread gone" };
-      const ev = await bookViewing(slot, `Viewing: ${t.listingTitle}`, `Booked by Sublet Sniper. Landlord: ${t.landlordEmail}. Bring ID; pay nothing before seeing the unit and signing.`, [t.landlordEmail]);
-      s.events.unshift({ id: ev.id, title: `Viewing: ${t.listingTitle}`, start: slot.start, end: slot.end, link: ev.link });
-      t.status = "booked";
-      log("calendar", `Booked ${fmtLA(slot.start)} on ${ev.mode === "google" ? "Google Calendar" : "mock calendar"}`);
+      await bookOnCalendar(t, slot);
       const msg = `Confirmed: see you ${fmtLA(slot.start)}. Please reply with the exact address and unit.\n\n${s.profile.name}`;
       await sendMail(t.landlordEmail, t.subject, msg, t.lastMessageId);
       t.messages.push({ from: "agent", text: msg, at: now() });
@@ -236,7 +243,8 @@ export async function handleInbound(m: { from: string; text: string; messageId?:
     t.offeredSlots = slots.map((x) => JSON.stringify(x)); t.status = "viewing_proposed";
     log("calendar", `Offered ${slots.length} viewing slots from your calendar`);
   } else if ((plan.intent === "pick_slot" || plan.intent === "landlord_time") && plan.slot) {
-    requestBooking(t, plan.slot);
+    if (process.env.REQUIRE_BOOKING_APPROVAL === "1") requestBooking(t, plan.slot);
+    else await bookOnCalendar(t, plan.slot).catch((e: unknown) => { log("info", `Calendar booking failed: ${String(e)}`); requestBooking(t, plan.slot!); });
   } else t.status = "active";
   t.askedProof = plan.askedProof;
   const sent = await sendMail(t.landlordEmail, t.subject, text, t.lastMessageId);

@@ -51,3 +51,11 @@ describe("landlord-proposed times", () => {
     expect(plan.intent).not.toBe("safety");
   });
 });
+
+describe("signature", () => {
+  it("replaces LLM sign-offs with exactly one 'Nicolás Arias'", async () => {
+    const { withSignature } = await import("@/lib/landlord");
+    const out = withSignature("Hi! Would $3,400 work?\n\nBest regards,\n[Your Name]", "Nicolás Arias");
+    expect(out).toBe("Hi! Would $3,400 work?\n\nBest,\nNicolás Arias");
+  });
+});

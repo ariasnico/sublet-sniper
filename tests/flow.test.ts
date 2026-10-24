@@ -25,11 +25,15 @@ describe("demo flow (mock LLM, mock mail, mock calendar, snapshot data)", () => 
     await handleInbound({ from: t.landlordEmail, text: "Here's a video walkthrough: https://example.com/tour. When can you come see it?", messageId: "m1" });
     expect(t.status).toBe("viewing_proposed");
     await handleInbound({ from: t.landlordEmail, text: "Option 2 works for me!", messageId: "m2" });
-    const book = s.approvals.find((a) => a.kind === "book_viewing")!;
-    await resolveApproval(book.id, true);
+    // auto-booked, single confirmation email, no approval needed
+    expect(s.approvals.some((a) => a.kind === "book_viewing")).toBe(false);
     expect(s.events).toHaveLength(1);
+    expect(t.messages.filter((x) => x.from === "agent" && /works/.test(x.text))).toHaveLength(1);
     expect(t.status).toBe("booked");
 
+    await handleInbound({ from: t.landlordEmail, text: "Yes it's available! Video tour Monday after 5pm?", messageId: "m2b" });
+    expect(t.messages.at(-1)!.text).not.toMatch(/thanks for the tour/i);
+    expect(t.messages.at(-1)!.text).toMatch(/Mon, Oct \d+, 5:30 PM PT works|Mon, (Oct|Nov) \d+/);
     await handleInbound({ from: t.landlordEmail, text: "Actually I'm out of the country, please Zelle the deposit today.", messageId: "m3" });
     expect(t.status).toBe("flagged");
     expect(s.timeline.some((x) => x.kind === "flag")).toBe(true);

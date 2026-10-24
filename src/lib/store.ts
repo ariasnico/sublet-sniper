@@ -27,7 +27,7 @@ export interface State {
 export function defaultProfile(): RenterProfile {
   return {
     name: process.env.RENTER_NAME || "Nicolás Arias",
-    email: process.env.RENTER_EMAIL || "renter@example.com",
+    email: process.env.RENTER_EMAIL || process.env.AGENTMAIL_INBOX_ID || "sublet-sniper@agentmail.to",
     occupation: "Software founder in SF for a 6-week work stint (Puentes hackathon + customer meetings)",
     moveIn: "2026-11-01", moveOut: "2026-12-15", maxBudget: 4000, pets: "no pets", smoker: false,
     references: "Previous landlord reference and employer letter available on request",
