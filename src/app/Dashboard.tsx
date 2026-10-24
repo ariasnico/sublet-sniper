@@ -145,7 +145,7 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
   const [searching, setSearching] = useState(false);
   const [listening, setListening] = useState(false);
   const [heard, setHeard] = useState("");
-  const [speak, setSpeak] = useState(true);
+  const speak = false; // Reading chat replies aloud added noise to the demo; the phone call is the voice moment.
   const [lang, setLang] = useState("en-US");
   const [tab, setTab] = useState<"ranked" | "flagged">("ranked");
   const [view, setView] = useState<"list" | "map">("list");
@@ -496,9 +496,6 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
               <div className="c-tools">
                 <button type="button" className={`mic ${listening ? "on" : ""}`} onClick={mic} data-tip={listening ? "Stop" : "Talk"} aria-label={listening ? "Stop listening" : "Talk"}>
                   {listening ? <span className="bars"><i /><i /><i /><i /></span> : <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" /></svg>}
-                </button>
-                <button type="button" className={`c-tool${speak ? " on" : ""}`} aria-pressed={speak} aria-label="Speak replies" data-tip={speak ? "Speaking replies" : "Replies muted"} onClick={() => setSpeak(!speak)}>
-                  <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" />{speak ? <path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" /> : <path d="M16 9.5l5 5M21 9.5l-5 5" />}</svg>
                 </button>
                 <select className="c-lang" value={lang} onChange={(e) => setLang(e.target.value)} aria-label="Voice language"><option value="en-US">English</option><option value="es-AR">Español</option></select>
                 <span className="grow" />
