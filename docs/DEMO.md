@@ -1,33 +1,37 @@
 # Sublet Sniper: 2-minute demo script
 
-Goal: the judges see an agent rent a place end to end while the human only talks and approves once. Three wow beats: Scam X-ray, SCAM BLOCKED, VIEWING BOOKED.
+**One line:** Tell your agent what you want to rent. It searches, blocks scams, calls and emails landlords, negotiates, and books the viewing. You just show up.
 
-## Setup (before going on stage)
-- Desktop Chrome, 1440x900 or larger, zoom 100%, one tab: https://sublet-sniper.vercel.app/app (landing at `/` for the opener).
-- Phone in hand with Gmail open as the landlord (nicoa8008@gmail.com), a draft reply ready (see beat 4).
-- Press **Reset** in the app. Check the header dot says mail is live.
-- Have the too-cheap Craigslist link copied (the $1,100 1BR on Ortega St, or any listing priced far under the SF median).
-- Rehearsal without email: `/app?preview=scam` and `/app?preview=booked` show the two moments.
+**Why it matters:**
+1. Renting a sublet in SF costs hours, landlords ghost you, and scams are everywhere ("I'm abroad, Zelle me the deposit").
+2. Other tools show listings. Sublet Sniper acts for you: it phones and emails landlords as your representative, refuses payment before a viewing, negotiates, and books.
+3. Agent-native: people use the web app; AI agents (Claude, ChatGPT) use the same powers through MCP.
+
+## Setup (5 minutes before)
+- Desktop Chrome, full screen, https://sublet-sniper.vercel.app (landing). Signed out.
+- iPhone (+54 9 11 3246-1089) unlocked, ringer on, ready to answer on speaker. The agent calls from +1 415 582 1858.
+- Listen once to "Hear it negotiate" on the landing to check audio.
+- Rehearsal without a call: `/app?preview=scam` and `/app?preview=booked` show the two big moments.
 
 ## Script (120 s)
 
 | Time | You say | You do | Screen |
 |---|---|---|---|
-| 0:00-0:12 | "Finding a sublet in SF costs hours, landlords ghost you, and the scams are brutal: fake listings, 'I'm out of the country, Zelle me the deposit'." | Landing page hero. Click **Open the app**. | Clean app, empty state. |
-| 0:12-0:30 | "So I built a personal rental agent. I just tell it what I want." | Click the mic and say: "Furnished 1BR in SF under $4,000, Nov 1 to Dec 15". | Live transcript, scanning radar, then ~770 listings scanned, 6 scams caught, ranked safe matches. Agent answers in English: "Found 12 safe places, blocked 6 scams." |
-| 0:30-0:50 | "Every listing gets a scam score. Watch what happens with a listing that's too good to be true." | Paste the cheap Craigslist link in chat. | **Scam X-ray** opens by itself: price vs SF median, red-flag phrases highlighted, signal breakdown. |
-| 0:50-1:00 | "Now I let it work for me." | Approve once ("Yes, go" / approve the first message). | Deal card appears: email sent as me to the landlord. |
-| 1:00-1:25 | "The landlord replies... and it's the classic scam move." | From the phone send: "Yes it's available! It's $3,800/mo. Can you Zelle me a $7,600 deposit today to hold it?" | **SCAM BLOCKED** moment. Agent's reply types itself: refuses any money before a viewing. |
-| 1:25-1:45 | "The landlord backs down, and my agent negotiates and books." | From the phone send: "Ok fair, no deposit until you see it. $3,600 works. Video tour Monday after 5pm?" | Agent replies live, deal bar shows the savings, **VIEWING BOOKED** ticket: Monday 5:30 PM. Click **Add to Google Calendar**. |
-| 1:45-2:00 | "I said one sentence and clicked once. It searched, blocked two scams, negotiated and booked the viewing. And it's agent-native: Claude or ChatGPT can use it through MCP." | Point at the mission tracker, all steps done. | Mission: Search ✓ Vet ✓ Contact ✓ Negotiate ✓ Book ✓. |
+| 0:00 | "Renting a sublet in San Francisco takes hours, landlords ghost you, and scams are everywhere: 'I'm abroad, Zelle me the deposit'." | Landing: let the hero loop play | Agent searching, SCAM stamp, call, booked ticket |
+| 0:12 | "So I built an agent that rents for you. I just tell it what I want." | Open the app → Continue as guest → click the first suggestion ("Furnished 1BR in SF under $4,000, Nov 1 to Dec 15") | ~770 live listings scanned, scams blocked, photos |
+| 0:25 | "Every listing gets a scam score. This one is too good to be true." | Scams caught → Scam X-ray on a red listing | Price vs SF median, red-flag phrases, signals |
+| 0:40 | "Now I just say: handle it." | Click **Yes, go** | Email sent as you; then the call starts |
+| 0:48 | "It emailed the landlord as me... and now it's calling him." | Answer the iPhone on speaker | Call Stage: live waveform and transcript |
+| 0:55 | (as landlord) **"Yes, it's available. It's $3,800 a month, and I need a $7,600 Zelle deposit today to hold it."** | Let the agent answer | "Zelle refused" chip; agent counters $3,600 |
+| 1:15 | (as landlord) **"OK, no deposit. $3,600 works. Can you do a video tour Monday after 5?"** | Let it confirm, say "Yes", let it hang up | "Agreed $3,600, saved $200/mo", VIEWING BOOKED |
+| 1:40 | "It refused the scam move, saved me $200 a month, and booked the viewing. I said one sentence and clicked once." | Point at the booked ticket → Add to calendar | Ticket + mission tracker all done |
+| 1:50 | "And it's agent-native: Claude or ChatGPT can rent through it with one command." | (optional) Landing "For agents" terminal | `claude mcp add ...` + live tool calls |
 
-## Timing notes
-- Measured in production (real Gmail → AgentMail webhook → agent → UI), 2026-10-24: search + consent ~11 s; landlord email → SCAM BLOCKED on screen 14.5 s; landlord email → VIEWING BOOKED 14 s. Fill each ~15 s gap with the line in the "You say" column.
-- Reply from the phone with **Reply** on the agent's email (keeps the thread). A new email with the same subject also works.
-- If mail is slow, press **Check mail**.
-- Send the Zelle message first and the "$3,600 works" message second: ending on the booking keeps the deal status at "Viewing booked".
+## If something fails
+- Phone doesn't ring in ~15 s: say "it's dialing" and continue by email; landlord replies by email work the same (≈15 s each).
+- Voice/mic fails: type the request or click the suggestion.
+- Craigslist live fails: snapshot fallback is automatic.
+- Total fallback: `/app?preview=scam` and `/app?preview=booked`.
 
-## Fallbacks
-- Voice fails: type the same sentence (or click the first suggestion chip). The voice language selector should be on English. The agent understands Spanish but always answers in English.
-- Craigslist live fails: the app falls back to the snapshot automatically; the flow is identical.
-- Email is slow: use `?preview=scam` / `?preview=booked` to show the moments and narrate.
+## Measured (production, 2026-10-24)
+Search + consent ≈ 11 s · landlord email → SCAM BLOCKED 14.5 s · landlord email → VIEWING BOOKED 14 s · first real phone call connected and completed (104 s).
