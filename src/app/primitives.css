@@ -1,0 +1,170 @@
+/* ── primitives ─────────────────────────────────────────────────────────────
+   A small controls layer that recreates HeroUI / Radix Themes "classic" /
+   shadcn quality in our brand, without a component library dependency.
+   Loaded after globals.css. Everything is scoped to the app shell (.app wraps
+   the Dashboard), so the landing page (CSS modules) is untouched.
+
+   Specificity rule: generic element primitives use :where(.app) so they match
+   the specificity of the old globals.css base rules (they replace those, and
+   still lose to any component rule such as `.seg button` or `.suggest`).
+   Component upgrades (switch, segmented, pills, tooltip) use a real `.app`
+   prefix so they win over the earlier component rules they refine.
+
+   Motion: 160-180ms strong ease-out, transform/opacity/colour only,
+   :active scale(.97), hover only on (hover: hover) and (pointer: fine).
+   Tokens live in :root in globals.css.                                       */
+
+.app { display: contents; }
+
+/* ── button: base = "surface" (bordered secondary) ─────────────────────────── */
+:where(.app) button {
+  font: inherit; font-weight: 560; letter-spacing: -.006em; line-height: 1.4;
+  color: var(--text); background: var(--panel); border: 0; border-radius: var(--ctl-r); padding: 8px 14px;
+  box-shadow: 0 0 0 1px var(--edge), 0 1px 2px rgba(28,25,23,.06), inset 0 -1px 0 rgba(28,25,23,.04);
+  cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+  transition: transform var(--t-press) var(--ease-out), background-color var(--t-ui) var(--ease-out),
+    box-shadow var(--t-ui) var(--ease-out), color var(--t-ui) var(--ease-out), opacity var(--t-ui) var(--ease-out);
+}
+:where(.app) button svg { flex: none; }
+@media (hover: hover) and (pointer: fine) {
+  :where(.app) button:hover:not(:disabled) { background: #FBFAF8; box-shadow: 0 0 0 1px var(--edge-hover), 0 1px 3px rgba(28,25,23,.08), inset 0 -1px 0 rgba(28,25,23,.04); }
+}
+:where(.app) button:active:not(:disabled) { transform: scale(0.97); }
+:where(.app) button:disabled { opacity: .5; cursor: not-allowed; }
+
+/* focus: a 2px accent ring offset by 2px (HeroUI / Radix), never on mouse click */
+:where(.app) :is(button, a, summary, [role="switch"], [tabindex]):focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); }
+:where(.app) button:focus-visible { box-shadow: 0 0 0 1px var(--edge), 0 1px 2px rgba(28,25,23,.06); }
+
+/* ── primary: solid accent with a soft top-lit gradient, inner highlight and a coloured glow */
+:where(.app) button.primary {
+  color: #fff; text-shadow: 0 1px 0 rgba(124,45,18,.22);
+  background: linear-gradient(180deg, var(--accent-hi) 0%, var(--accent) 52%, var(--accent-lo) 100%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.30), inset 0 -1px 0 rgba(124,45,18,.18),
+    0 0 0 1px var(--accent-edge), 0 1px 2px rgba(194,65,12,.30), 0 4px 12px -5px rgba(249,115,22,.42);
+}
+@media (hover: hover) and (pointer: fine) {
+  :where(.app) button.primary:hover:not(:disabled) {
+    background: linear-gradient(180deg, #F97F2C 0%, #F06C12 52%, #E25D08 100%);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.30), inset 0 -1px 0 rgba(124,45,18,.22),
+      0 0 0 1px #D25507, 0 1px 2px rgba(194,65,12,.34), 0 8px 18px -6px rgba(249,115,22,.55);
+  }
+}
+:where(.app) button.primary:active:not(:disabled) {
+  box-shadow: inset 0 1px 2px rgba(124,45,18,.28), 0 0 0 1px var(--accent-edge), 0 1px 1px rgba(194,65,12,.25);
+}
+:where(.app) button.primary:focus-visible {
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.30), 0 0 0 1px var(--accent-edge), 0 4px 12px -5px rgba(249,115,22,.42);
+}
+:where(.app) button.primary:where(:disabled) { opacity: 1; color: rgba(255,255,255,.85); text-shadow: none; background: #FDBA8C; box-shadow: 0 0 0 1px rgba(234,98,11,.25); }
+
+/* ── ghost ("light"): no fill, quiet hairline; fills on hover ──────────────── */
+:where(.app) button.ghost { background: transparent; color: var(--text); box-shadow: 0 0 0 1px var(--edge); }
+@media (hover: hover) and (pointer: fine) {
+  :where(.app) button.ghost:hover:not(:disabled) { background: rgba(28,25,23,.045); box-shadow: 0 0 0 1px var(--edge-hover); }
+}
+:where(.app) button.ghost:focus-visible { box-shadow: 0 0 0 1px var(--edge); }
+
+/* ── soft ("flat"): tinted accent, coloured text, faint coloured edge ───────── */
+:where(.app) button.soft {
+  background: var(--accent-soft); color: var(--accent-strong);
+  box-shadow: 0 0 0 1px var(--accent-soft-edge), inset 0 1px 0 rgba(255,255,255,.7);
+}
+@media (hover: hover) and (pointer: fine) {
+  :where(.app) button.soft:hover:not(:disabled) { background: var(--accent-soft-hover); box-shadow: 0 0 0 1px rgba(249,115,22,.36), inset 0 1px 0 rgba(255,255,255,.7); }
+}
+:where(.app) button.soft:focus-visible { box-shadow: 0 0 0 1px var(--accent-soft-edge); }
+
+/* ── sizes (≈ HeroUI sm/md/lg: 26 / 32 / 36 / 46px) ─────────────────────────── */
+:where(.app) button.xs { padding: 3px 9px; font-size: 12px; border-radius: var(--ctl-r-xs); }
+:where(.app) button.sm { padding: 6px 12px; font-size: 13px; border-radius: var(--ctl-r-sm); }
+:where(.app) button.lg { padding: 12px 20px; font-size: 15px; font-weight: 600; border-radius: var(--ctl-r-lg); }
+
+/* ── fields: input / textarea / select ─────────────────────────────────────
+   Specificity stays at (0,0,1) / (0,1,1) so component fields (the chat
+   composer's borderless textarea) keep their own look.                      */
+:where(.app) :is(input, textarea, select):where(:not([type="checkbox"]):not([type="radio"])) {
+  font: inherit; color: var(--text); background-color: var(--panel); border: 0; border-radius: var(--ctl-r);
+  box-shadow: 0 0 0 1px var(--edge), inset 0 1px 2px rgba(28,25,23,.04);
+  transition: box-shadow var(--t-ui) var(--ease-out), background-color var(--t-ui) var(--ease-out);
+}
+:where(.app) :is(input, textarea)::placeholder { color: var(--faint); }
+@media (hover: hover) and (pointer: fine) {
+  :where(.app) :is(input, select):where(:not([type="checkbox"]):not([type="radio"]):hover:not(:focus):not(:disabled)) { box-shadow: 0 0 0 1px var(--edge-hover), inset 0 1px 2px rgba(28,25,23,.04); }
+}
+:where(.app) :is(input, select):where(:not([type="checkbox"]):not([type="radio"])):focus-visible,
+:where(.app) textarea:where(:focus-visible) {
+  outline: none; box-shadow: 0 0 0 1px rgba(249,115,22,.65), 0 0 0 4px var(--accent-ring);
+}
+:where(.app) select {
+  -webkit-appearance: none; appearance: none; cursor: pointer; font-weight: 520;
+  padding: 5px 28px 5px 10px; border-radius: var(--ctl-r-sm);
+  box-shadow: 0 0 0 1px var(--edge), 0 1px 2px rgba(28,25,23,.05);
+  background: var(--panel) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2378716C' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m7 15 5 5 5-5M7 9l5-5 5 5'/%3E%3C/svg%3E") no-repeat right 9px center / 12px;
+}
+:where(.app) input[type="checkbox"] { accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer; }
+
+/* ── switch (autopilot): pill control with a recessed track and a lit thumb ── */
+.app .ap-toggle {
+  font-weight: 560; color: var(--mute); background: var(--panel);
+  box-shadow: 0 0 0 1px var(--edge), 0 1px 2px rgba(28,25,23,.06), inset 0 -1px 0 rgba(28,25,23,.04);
+}
+.app .ap-track { background: #DEDAD5; box-shadow: inset 0 1px 2px rgba(28,25,23,.18), inset 0 0 0 1px rgba(28,25,23,.04); transition: background-color var(--t-ui) var(--ease-out), box-shadow var(--t-ui) var(--ease-out); }
+.app .ap-track i { background: linear-gradient(180deg, #fff, #FAF9F7); box-shadow: 0 1px 2px rgba(28,25,23,.24), 0 0 0 .5px rgba(28,25,23,.08); }
+.app .ap-toggle.on { color: var(--accent-strong); background: var(--accent-soft); box-shadow: 0 0 0 1px rgba(249,115,22,.34), 0 1px 2px rgba(194,65,12,.08), inset 0 1px 0 rgba(255,255,255,.7); }
+.app .ap-toggle.on .ap-track { background: linear-gradient(180deg, var(--accent-hi), var(--accent-lo)); box-shadow: inset 0 1px 2px rgba(124,45,18,.30), 0 0 0 1px rgba(221,91,9,.25); }
+@media (hover: hover) and (pointer: fine) {
+  .app .ap-toggle:hover:not(:disabled):not(.on) { color: var(--text); background: #FBFAF8; box-shadow: 0 0 0 1px var(--edge-hover), 0 1px 3px rgba(28,25,23,.08); }
+  .app .ap-toggle:hover:not(:disabled):not(.on) .ap-track { background: #D3CEC8; }
+  .app .ap-toggle.on:hover:not(:disabled) { background: var(--accent-soft-hover); }
+}
+
+/* ── tooltip: dark glass, hairline edge, origin-aware ──────────────────────── */
+.app .tip {
+  background: rgba(28,25,23,.94); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+  border-radius: 10px; padding: 9px 12px; font-size: 12.5px; letter-spacing: -.003em;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.08), 0 1px 2px rgba(0,0,0,.12), 0 12px 32px -8px rgba(28,25,23,.35);
+}
+
+/* ── segmented control: recessed well, raised white thumb ──────────────────── */
+.app .seg { background: var(--well); border-radius: var(--ctl-r); padding: 3px; gap: 2px; box-shadow: inset 0 1px 2px rgba(28,25,23,.06), inset 0 0 0 1px rgba(28,25,23,.04); }
+.app .seg button { border-radius: 7px; font-weight: 550; color: var(--mute); background: transparent; box-shadow: none; text-shadow: none; }
+.app .seg button.on { color: var(--text); background: var(--panel); box-shadow: 0 0 0 1px rgba(28,25,23,.06), 0 1px 2px rgba(28,25,23,.08), 0 2px 6px -2px rgba(28,25,23,.08); }
+.app .seg button span { font-weight: 600; }
+.app .seg button:focus-visible { outline-offset: 0; }
+@media (hover: hover) and (pointer: fine) {
+  .app .seg button:hover:not(.on):not(:disabled) { color: var(--text); background: rgba(255,255,255,.55); box-shadow: none; }
+}
+
+/* ── badge (count): small lit accent dot-pill ──────────────────────────────── */
+.app .badge {
+  min-width: 20px; height: 20px; padding: 0 6px; font-size: 11.5px; font-weight: 650; font-variant-numeric: tabular-nums;
+  background: linear-gradient(180deg, var(--accent-hi), var(--accent-lo)); color: #fff;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.28), 0 0 0 1px var(--accent-edge), 0 2px 6px -2px rgba(249,115,22,.5);
+}
+
+/* ── chips (listing facts): flat tags with a hairline ──────────────────────── */
+.app .chips { gap: 5px; }
+.app .chips span { font-size: 11.5px; font-weight: 520; color: var(--mute); background: #F5F4F1; padding: 2px 8px; border-radius: 6px; box-shadow: inset 0 0 0 1px rgba(28,25,23,.06); }
+.app .chips .demo { background: var(--accent-soft); color: var(--accent-strong); font-weight: 600; box-shadow: inset 0 0 0 1px var(--accent-soft-edge); }
+.app .chips .src { background: transparent; box-shadow: none; color: var(--faint); padding-left: 2px; }
+
+/* ── status pills: tinted, with a leading dot in the tone's colour ─────────── */
+.app .st { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px 3px 8px; font-weight: 600; letter-spacing: -.003em;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 16%, transparent); }
+.app .st::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: .85; flex: none; }
+
+/* ── suggestion rows: surface buttons; no appended arrow glyph ─────────────── */
+.app .suggest { box-shadow: 0 0 0 1px var(--edge), 0 1px 2px rgba(28,25,23,.05); font-weight: 520; }
+.app .suggest::after { content: none; }
+@media (hover: hover) and (pointer: fine) {
+  .app .suggest:hover:not(:disabled) { background: var(--accent-soft); color: var(--accent-strong); box-shadow: 0 0 0 1px rgba(249,115,22,.32), 0 1px 3px rgba(194,65,12,.08); }
+}
+.app .suggest:active:not(:disabled) { transform: scale(0.985); }
+
+/* ── surfaces: layered hairline + ambient shadow ───────────────────────────── */
+.app .panel { box-shadow: 0 0 0 1px rgba(28,25,23,.065), 0 1px 2px rgba(28,25,23,.04), 0 12px 32px -18px rgba(28,25,23,.14); }
+
+@media (prefers-reduced-motion: reduce) {
+  :where(.app) button:active:not(:disabled), .app .suggest:active:not(:disabled) { transform: none; }
+}

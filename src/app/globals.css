@@ -10,6 +10,12 @@
   --shadow-lg: 0 24px 60px -12px rgba(28,25,23,.25);
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --r: 18px; --top-h: 64px; --mission-h: 116px;
+  /* primitives (used by primitives.css): HeroUI / Radix-classic style controls in our brand */
+  --accent-hi: #FB8A3D; --accent-lo: #EA620B; --accent-edge: #DD5B09; --accent-soft-hover: #FFEBD8; --accent-soft-edge: rgba(249,115,22,.24);
+  --edge: rgba(28,25,23,.11); --edge-hover: rgba(28,25,23,.18); --well: #F1EFEB;
+  --ctl-r: 10px; --ctl-r-sm: 9px; --ctl-r-xs: 7px; --ctl-r-lg: 12px;
+  --focus-ring: 2px solid var(--accent); --focus-offset: 2px;
+  --t-press: 160ms; --t-ui: 180ms;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; background: var(--bg); color: var(--text); }
