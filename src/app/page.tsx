@@ -4,6 +4,9 @@ import { getImageProps } from "next/image";
 import { preload } from "react-dom";
 import { Bot } from "./Bot";
 import { CopyButton } from "./landing/CopyButton";
+import { RedFlagMarquee } from "./landing/borrowed/RedFlagMarquee";
+import { HaloCards } from "./landing/borrowed/HaloCards";
+import { LiveDemos } from "./landing/borrowed/LiveDemos";
 import s from "./landing.module.css";
 
 const SITE = "https://sublet-sniper.vercel.app";
@@ -101,6 +104,8 @@ export default function Landing() {
           </div>
         </section>
 
+        <RedFlagMarquee />
+
         {/* ── Problem ──────────────────────────────────────── */}
         <section className={s.section} aria-labelledby="problem-title">
           <div className={s.problem}>
@@ -126,6 +131,8 @@ export default function Landing() {
             </ul>
           </div>
         </section>
+
+        <HaloCards />
 
         {/* ── How it works ─────────────────────────────────── */}
         <section id="how" className={`${s.section} ${s.sectionTint}`} aria-labelledby="how-title">
@@ -183,6 +190,8 @@ export default function Landing() {
             </li>
           </ol>
         </section>
+
+        <LiveDemos />
 
         {/* ── Agents ───────────────────────────────────────── */}
         <section id="agents" className={`${s.section} ${s.sectionDark}`} aria-labelledby="agents-title">
