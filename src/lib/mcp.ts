@@ -9,6 +9,10 @@ import { emailAllowed } from "./landlord";
 import { syncThreads } from "./mailsync";
 import { fetchListingPage } from "./sources/craigslist";
 import { findListing, state } from "./store";
+import { demoListings } from "./demo";
+import { normalizeHeuristic } from "./normalize";
+import { rankListings } from "./rank";
+import { parseCriteria } from "./criteria";
 import { CL_URL, resolveApproval, toolAnalyzeUrl, toolDraftContact, toolSearch } from "./tools";
 import type { ListingType, RankedListing, RawListing } from "./types";
 
@@ -61,6 +65,12 @@ export async function mcpCheckScam(i: { url: string }, fetcher: (url: string) =>
 /** Contacts a landlord. Email only to allowlisted demo addresses; Craigslist listings get a draft the human sends. */
 export async function mcpContact(i: { listingId: string }) {
   if (!findListing(i.listingId)) await toolSearch({ query: "" }); // fresh serverless instance: rebuild results
+  if (!findListing(i.listingId) && i.listingId.startsWith("demo-")) {
+    // Demo listings are fixtures: score them directly instead of hoping they rank in the default top results.
+    const ranked = rankListings(demoListings().map(normalizeHeuristic), parseCriteria(""));
+    const hit = ranked.find((x) => x.id === i.listingId);
+    if (hit) (hit.scam.light === "red" ? state().flagged : state().results).push(hit);
+  }
   const l = findListing(i.listingId);
   if (!l) return { error: `Unknown listingId "${i.listingId}". Call search_sublets first and use an id from its matches.` };
   const email = l.demo?.landlordEmail;

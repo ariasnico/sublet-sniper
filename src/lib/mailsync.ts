@@ -3,7 +3,7 @@ import { am, fromAddress, inboxId } from "./mail";
 import { demoListings } from "./demo";
 import { detectRedFlags, stripQuoted } from "./landlord";
 import { laInstant } from "./time";
-import { sessionStart, state, uid, type Thread, type ThreadMsg } from "./store";
+import { sessionStart, state, type Thread, type ThreadMsg } from "./store";
 
 export const SUBJECT_TAG = "[Sublet Sniper demo]";
 export const HANDLED = "sniper-handled";
@@ -72,7 +72,8 @@ async function doSync(): Promise<PendingInbound[]> {
   lastSync = Date.now();
   const enc = encodeURIComponent(inboxId());
   const own = inboxId().toLowerCase();
-  const list = await am(`/inboxes/${enc}/threads?limit=20`);
+  // labels=sent: the default listing omits threads that only contain our outgoing email (a just-contacted landlord).
+  const list = await am(`/inboxes/${enc}/threads?limit=20&labels=sent`);
   const items = (Array.isArray(list.threads) ? list.threads : []) as Record<string, unknown>[];
   const s = state();
   const next: PendingInbound[] = [];
@@ -105,7 +106,7 @@ async function doSync(): Promise<PendingInbound[]> {
     const existing = s.threads.find((t) => t.agentmailThreadId === tid);
     const last = msgs[msgs.length - 1];
     const derived: Thread = {
-      id: existing?.id ?? uid("th"), listingId: existing?.listingId ?? listing?.id ?? "demo-mission-bay",
+      id: existing?.id ?? `th-${tid}`, /* stable across instances and calls */ listingId: existing?.listingId ?? listing?.id ?? "demo-mission-bay",
       listingTitle: existing?.listingTitle ?? listing?.title ?? bare, landlordEmail, subject,
       messages: tmsgs, agentmailThreadId: tid, lastMessageId: last?.message_id,
       // A booking survives later messages; otherwise trust what the emails say (the reply may have been handled elsewhere).
