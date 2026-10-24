@@ -84,10 +84,12 @@ function agentBody(toolIds, withDataCollection = true) {
       // Outbound PSTN (esp. international) connects the callee's audio a few seconds after "answered": wait for their
       // "Hello?" before greeting, and re-engage if the line stays silent instead of waiting forever.
       turn: { turn_timeout: 5, turn_eagerness: "normal", speculative_turn: false, transcribe_on_disabled_interruptions: true, initial_wait_time: 4,
+        interruption_ignore_terms: ["yeah", "yes", "okay", "ok", "uh-huh", "mm-hmm", "right", "sure", "hello", "hi", "uh", "um"], merge_with_default_ignore_terms: true,
         soft_timeout_config: { timeout_seconds: 3, message: "Hi, can you hear me?", use_llm_generated_message: false, max_soft_timeouts_per_generation: 2 } },
       vad: { background_voice_detection: true },
       asr: { keywords: ["Zelle", "Venmo", "Cash App", "PayPal", "wire", "deposit", "sublease", "sublet", "leaseholder", "Caltrain", "Mission Bay", "video tour", "Nicolás", "Sniper"] },
-      conversation: { client_events: ["audio", "agent_response", "user_transcript", "agent_response_correction", "agent_tool_response"] },
+      // Barge-in on (a real sentence stops the agent), but fillers and background voices don't.
+      conversation: { client_events: ["audio", "interruption", "agent_response", "user_transcript", "agent_response_correction", "agent_tool_response"] },
       ...(process.env.ELEVENLABS_VOICE_ID ? { tts: { voice_id: process.env.ELEVENLABS_VOICE_ID } } : {}),
     },
     ...(withDataCollection ? { platform_settings: { data_collection: {
