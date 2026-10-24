@@ -1,0 +1,89 @@
+/* Red-flag marquee. Reads tokens from globals.css :root with fallbacks. */
+.band {
+  --rf-ink: var(--text, #1C1917);
+  --rf-mute: var(--mute, #57534E);
+  --rf-red: var(--red, #B91C1C);
+  --rf-ease: var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1));
+  --rf-gap: 40px;
+  padding: 28px 0 30px;
+  background: #fff;
+  border-block: 1px solid rgba(28, 25, 23, 0.07);
+}
+
+.caption {
+  margin: 0;
+  padding: 0 20px;
+  text-align: center;
+  font-size: 0.9375rem;
+  font-weight: 550;
+  color: var(--rf-mute);
+}
+
+.viewport {
+  overflow: hidden;
+  margin-top: 16px;
+  touch-action: pan-y;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  mask-image: linear-gradient(to right, transparent, #000 12%, #000 88%, transparent);
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 12%, #000 88%, transparent);
+}
+.viewport:active { cursor: grabbing; }
+
+/* Four identical rows, each carrying its own trailing gap, so one lap is
+   exactly 25% of the track (no jump in the CSS fallback). */
+.track {
+  display: flex;
+  width: max-content;
+  will-change: transform;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .track { animation: rfMarquee 60s linear infinite; }
+  .viewport:hover .track:not(.trackJs) { animation-play-state: paused; }
+}
+.trackJs { animation: none !important; }
+
+@keyframes rfMarquee {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(-25%, 0, 0); }
+}
+
+.row {
+  list-style: none;
+  margin: 0;
+  padding: 0 var(--rf-gap) 0 0;
+  display: flex;
+  flex: none;
+  gap: var(--rf-gap);
+}
+
+.row li {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  white-space: nowrap;
+  font-size: 1.0625rem;
+  font-weight: 620;
+  letter-spacing: -0.015em;
+  color: color-mix(in srgb, var(--rf-ink) 62%, transparent);
+  transition: color 160ms var(--rf-ease);
+}
+.row li svg { flex: none; }
+.row li circle { fill: #FEF2F2; stroke: rgba(185, 28, 28, 0.28); stroke-width: 1; }
+.row li path { stroke: var(--rf-red); stroke-width: 1.6; stroke-linecap: round; fill: none; }
+@media (hover: hover) and (pointer: fine) {
+  .row li:hover { color: var(--rf-ink); }
+}
+
+@media (min-width: 760px) {
+  .band { padding: 34px 0 36px; --rf-gap: 52px; }
+}
+
+/* Reduced motion: static, wrapped, no duplicates. */
+@media (prefers-reduced-motion: reduce) {
+  .viewport { mask-image: none; -webkit-mask-image: none; cursor: default; }
+  .track { width: auto; justify-content: center; padding: 0 20px; }
+  .row { flex-wrap: wrap; justify-content: center; gap: 12px 28px; padding: 0; }
+  .dup { display: none; }
+}
