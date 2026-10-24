@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type { Thread } from "@/lib/store";
 import type { RankedListing } from "@/lib/types";
 
@@ -10,6 +10,7 @@ const ago = (iso: string) => {
 };
 // Messages newer than page load are "live": they get the typing treatment.
 const PAGE_LOAD = typeof window === "undefined" ? "" : new Date().toISOString();
+const reduced = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 type Check = { k: string; state: "ok" | "wait" | "blocked" };
 function protocol(t: Thread, l?: RankedListing): Check[] {
@@ -36,29 +37,43 @@ export function deal(t: Thread, l?: RankedListing) {
   return { listed: l?.priceMonthly ?? null, asked, offered };
 }
 
-function Typed({ text, live }: { text: string; live: boolean }) {
+function Typed({ text, live, onDone }: { text: string; live: boolean; onDone?: () => void }) {
   const [n, setN] = useState(live ? 0 : text.length);
+  const done = useRef(onDone);
+  useEffect(() => { done.current = onDone; }, [onDone]);
   useEffect(() => {
-    if (!live || window.matchMedia("(prefers-reduced-motion: reduce)").matches) { setN(text.length); return; }
+    if (!live || reduced()) { setN(text.length); if (live) done.current?.(); return; }
     const step = Math.max(2, Math.ceil(text.length / 120)); // ~2s regardless of length
-    const id = setInterval(() => setN((x) => { if (x >= text.length) { clearInterval(id); return x; } return x + step; }), 16);
+    let fired = false;
+    const id = setInterval(() => setN((x) => {
+      if (x >= text.length) { clearInterval(id); if (!fired) { fired = true; setTimeout(() => done.current?.(), 0); } return x; }
+      return Math.min(text.length, x + step);
+    }), 16);
     return () => clearInterval(id);
   }, [text, live]);
-  return <>{text.slice(0, n)}{n < text.length && <span className="caret" />}</>;
+  return <>{text.slice(0, n)}{n < text.length && <span className="caret" aria-hidden="true" />}</>;
 }
 
-function Bubble({ x }: { x: Thread["messages"][number] }) {
+function Bubble({ x, last, onTyped }: { x: Thread["messages"][number]; last: boolean; onTyped?: () => void }) {
   const [open, setOpen] = useState(false);
-  const live = x.from === "agent" && !!PAGE_LOAD && x.at > PAGE_LOAD;
+  // Newer than page load = arrived while you watched: it slides in from its own side and glows once.
+  const fresh = !!PAGE_LOAD && x.at > PAGE_LOAD;
+  const live = x.from === "agent" && fresh;
+  const [typing, setTyping] = useState(live);
   const long = x.text.length > 220;
+  // Only the newest live reply stays open while it types; older long ones collapse so the latest beat stays in view.
+  const clamp = long && !open && !(live && last);
   return (
-    <div className={`bub ${x.from === "landlord" ? "ll" : "ag"}${x.flagged ? " flagged" : ""}${live ? " live" : ""}`}>
+    <div className={`bub ${x.from === "landlord" ? "ll" : "ag"}${x.flagged ? " flagged" : ""}${fresh ? " fresh" : ""}${typing ? " live" : ""}`}>
       <div className="bub-who">{x.from === "landlord" ? "Landlord" : "Your agent, as you"}<span>{ago(x.at)}</span></div>
-      <div className={`bub-text${long && !open && !live ? " clamp" : ""}`} onClick={() => long && setOpen(!open)}><Typed text={x.text} live={live} /></div>
-      {x.flagged && <div className="bub-flag">Blocked: {x.flagged.join(", ")}</div>}
+      <div className={`bub-text${clamp ? " clamp" : ""}`} onClick={() => long && setOpen(!open)}>
+        <Typed text={x.text} live={live} onDone={() => { setTyping(false); onTyped?.(); }} /></div>
+      {x.flagged && <div className="bub-flag"><i aria-hidden="true">!</i>Blocked: {x.flagged.join(", ")}</div>}
     </div>
   );
 }
+
+const usd = (n: number) => `$${n.toLocaleString("en-US")}`;
 
 function ThreadCard({ t, listing }: { t: Thread; listing?: RankedListing }) {
   const [all, setAll] = useState(false);
@@ -66,33 +81,43 @@ function ThreadCard({ t, listing }: { t: Thread; listing?: RankedListing }) {
   const last = t.messages[t.messages.length - 1];
   // The landlord just wrote and the agent hasn't answered yet: show it working.
   const replying = last?.from === "landlord" && !last.flagged && t.status !== "booked" && Date.now() - new Date(last.at).getTime() < 3 * 60e3;
+  const card = useRef<HTMLDivElement>(null);
   const fresh = useRef(last?.at);
   const [pulse, setPulse] = useState(false);
+  // Keep the newest beat on screen so the presenter never has to scroll. "nearest" means no jump when it already fits.
+  const reveal = useRef(() => requestAnimationFrame(() => {
+    const el = card.current; if (!el || !el.offsetParent) return;
+    const box = el.closest(".scroll");
+    el.scrollIntoView({ block: box && el.offsetHeight > box.clientHeight ? "end" : "nearest", behavior: reduced() ? "auto" : "smooth" });
+  })).current;
   useEffect(() => {
-    if (last?.at && fresh.current && last.at !== fresh.current) { setPulse(true); const id = setTimeout(() => setPulse(false), 1600); fresh.current = last.at; return () => clearTimeout(id); }
+    if (last?.at && fresh.current && last.at !== fresh.current) { setPulse(true); reveal(); const id = setTimeout(() => setPulse(false), 1400); fresh.current = last.at; return () => clearTimeout(id); }
     fresh.current = last?.at;
-  }, [last?.at]);
+  }, [last?.at, reveal]);
+  const d = deal(t, listing);
+  const save = d?.offered ? d.asked - d.offered : 0;
   return (
-    <div className={`th st-${t.status}${pulse ? " pulse" : ""}`}>
+    <div ref={card} className={`th st-${t.status}${pulse ? " pulse" : ""}`}>
       <div className="th-head">
         <div className="th-title">{t.listingTitle.replace(/^\[DEMO DATA\]\s*/, "")}</div>
-        <span className={`st st-${t.status}`}>{STATUS[t.status] ?? t.status}</span>
+        <span key={t.status} className={`st st-${t.status}`}>{STATUS[t.status] ?? t.status}</span>
       </div>
       <div className="th-k">Safety checks</div>
       <ul className="proto" aria-label="Safety checks">
-        {protocol(t, listing).map((c) => <li key={c.k} className={c.state}>
-          <i aria-hidden="true">{c.state === "ok" ? "✓" : c.state === "blocked" ? "!" : ""}</i>{c.k}</li>)}
+        {/* Keyed by position so a chip keeps its node and cross-fades when its state flips; the dot remounts to replay its tick. */}
+        {protocol(t, listing).map((c, i) => <li key={i} className={c.state} style={{ "--i": i } as CSSProperties}>
+          <i key={c.state} aria-hidden="true">{c.state === "ok" ? "✓" : c.state === "blocked" ? "!" : ""}</i>{c.k}</li>)}
       </ul>
-      {(() => { const d = deal(t, listing); if (!d) return null; const save = d.offered ? d.asked - d.offered : 0; return (
-        <div className="deal">
-          {d.listed && <div><span>Listed</span><b>${d.listed.toLocaleString("en-US")}</b></div>}
-          <div className="asked"><span>They asked</span><b>${d.asked.toLocaleString("en-US")}</b></div>
-          <div className={d.offered ? "offer" : "pending"}><span>{t.status === "booked" ? "Agent got" : "Agent offered"}</span><b>{d.offered ? `$${d.offered.toLocaleString("en-US")}` : "…"}</b></div>
-          {save > 0 && <div className="save"><span>You save</span><b>${save.toLocaleString("en-US")}/mo</b></div>}
-        </div>); })()}
+      {d && <div className="deal">
+        {d.listed && <div className="listed"><span>Listed</span><b>{usd(d.listed)}</b></div>}
+        <div className={`asked${d.offered ? " struck" : ""}`}><span>They asked</span><b>{usd(d.asked)}</b></div>
+        <div className={d.offered ? "offer" : "pending"}><span>{t.status === "booked" ? "Agent got" : "Agent offered"}</span><b key={d.offered ?? "p"}>{d.offered ? usd(d.offered) : "…"}</b></div>
+        {/* Always rendered so the bar never reflows when the saving lands. */}
+        <div className={save > 0 ? "save" : "save pending"}><span>You save</span><b key={save}>{save > 0 ? `${usd(save)}/mo` : "…"}</b></div>
+      </div>}
       {t.messages.length > 3 && <button className="th-more" onClick={() => setAll(!all)}>{all ? "Show latest only" : `Show ${t.messages.length - 3} earlier`}</button>}
       <div className="th-msgs">
-        {msgs.map((x, i) => <Bubble key={x.id ?? `${x.at}-${i}`} x={x} />)}
+        {msgs.map((x, i) => <Bubble key={x.id ?? `${x.at}-${i}`} x={x} last={i === msgs.length - 1} onTyped={i === msgs.length - 1 ? reveal : undefined} />)}
         {replying && <div className="bub ag replying"><div className="bub-who">Your agent, as you</div><div className="typing"><i /><i /><i /></div><span className="replying-t">Reading the reply and checking your calendar</span></div>}
       </div>
     </div>
