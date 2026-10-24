@@ -56,6 +56,8 @@ export function resetState() { g.__sniper = fresh(); epoch.bornAt = new Date().t
  */
 const epoch = (globalThis as unknown as { __sniperEpoch?: { bornAt: string } }).__sniperEpoch ??= { bornAt: "" };
 (globalThis as unknown as { __sniperEpoch?: { bornAt: string } }).__sniperEpoch = epoch;
+/** Start of the current session (last Reset seen by this instance); "" if unknown. */
+export const sessionStart = () => epoch.bornAt;
 export function ensureEpoch(resetAt: unknown) {
   if (typeof resetAt !== "string" || !resetAt || resetAt <= epoch.bornAt) return;
   const s = state();

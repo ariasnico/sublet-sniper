@@ -358,7 +358,9 @@ export async function handleInbound(m: { from: string; text: string; messageId?:
   const s = state();
   if (m.messageId && s.seenMessageIds.includes(m.messageId)) return { skipped: "seen" };
   if (m.messageId) s.seenMessageIds.push(m.messageId);
-  const t = s.threads.find((x) => (m.threadId && x.agentmailThreadId === m.threadId) || x.landlordEmail === m.from.toLowerCase());
+  // Exact AgentMail thread first; otherwise the most recent conversation with that landlord.
+  const t = (m.threadId ? s.threads.find((x) => x.agentmailThreadId === m.threadId) : undefined)
+    ?? [...s.threads].reverse().find((x) => x.landlordEmail === m.from.toLowerCase());
   if (!t) { log("email_in", `Ignored email from unknown sender ${m.from}`); return { skipped: "unknown sender" }; }
   const flags = detectRedFlags(m.text);
   const known = m.messageId ? t.messages.find((x) => x.id === m.messageId) : undefined;

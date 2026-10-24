@@ -1,7 +1,7 @@
 import { mailLive } from "./config";
 import { am, fromAddress, inboxId } from "./mail";
 import { demoListings } from "./demo";
-import { state, uid, type Thread, type ThreadMsg } from "./store";
+import { sessionStart, state, uid, type Thread, type ThreadMsg } from "./store";
 
 export const SUBJECT_TAG = "[Sublet Sniper demo]";
 export const HANDLED = "sniper-handled";
@@ -44,6 +44,10 @@ async function doSync(): Promise<PendingInbound[]> {
   const next: PendingInbound[] = [];
   for (const it of items) {
     if (!String(it.subject ?? "").includes(SUBJECT_TAG)) continue;
+    // After a Reset, conversations from earlier sessions stay in AgentMail but are not part of this one
+    // (otherwise the agent thinks it already wrote to that landlord and never starts the new deal).
+    const since = sessionStart(); const touched = String(it.updated_at ?? it.timestamp ?? "");
+    if (since && touched && touched < since) continue;
     const tid = String(it.thread_id);
     const full = await am(`/inboxes/${enc}/threads/${encodeURIComponent(tid)}`);
     const msgs = (Array.isArray(full.messages) ? full.messages : []) as AmMsg[];
