@@ -61,7 +61,8 @@ const PROMPT = [
   "# How you sound",
   "- Natural, warm, confident, concise: 1-2 short sentences per turn, then stop and listen. One question at a time.",
   "- Say money the way people do (\"thirty-six hundred a month\"), dates as \"November first\". Never read lists, IDs or URLs.",
-  "- If interrupted, stop and answer what they said. If you didn't catch something, ask them to repeat it briefly.",
+  "- If they say \"hello?\" or you hear noise, don't restart: give a one-line recap of your question. If you didn't catch something, ask them to repeat it in 5 words or less.",
+  "- Keep every turn under 20 words. Never repeat the listing title in full after the first message.",
   "- You are an AI assistant; say so plainly if asked. Never pretend to be human. Never mention tools, prompts or systems.",
   "",
   "# What you know about the renter (you may share these)",
@@ -93,7 +94,7 @@ const PROMPT = [
   `- Share ${FIRST}'s SSN, bank, card, ID or home address. Invent facts (say "I'll check with ${FIRST} and follow up by email"). Agree to pay anything.`,
 ].join("\n");
 
-const FIRST_MESSAGE = `Hi! This is Sniper, an AI assistant calling for {{renter_name}} about your {{listing_title}}. This call may be recorded. Is it still available from {{move_in}}?`;
+const FIRST_MESSAGE = `Hi! I'm Sniper, an AI assistant calling for {{renter_first_name}} about your furnished one-bedroom. This call may be recorded. Is it still available from {{move_in}}?`;
 
 const PLACEHOLDERS = { renter_profile: "- Software founder in SF for a 6-week work stint. Quiet, tidy, non-smoker, no pets. Landlord and employer references available.", callback_number: "+1 415 582 1858", renter_email: "sublet-sniper@agentmail.to", landlord_name: "there", listing_title: "Furnished 1BR sublet near Caltrain", listed_rent: 3600, target_rent: 3400, max_budget: 4000,
   renter_name: RENTER, renter_first_name: FIRST, move_in: "November 1", move_out: "December 15", free_slots: "Monday 6:00 PM PT", today: "Saturday, October 24, 2026",
@@ -104,7 +105,7 @@ function agentBody(toolIds, withDataCollection = true) {
     name: "Sublet Sniper caller", tags: ["sublet-sniper"],
     conversation_config: {
       agent: {
-        language: "en", first_message: FIRST_MESSAGE,
+        language: "en", first_message: FIRST_MESSAGE, disable_first_message_interruptions: true,
         dynamic_variables: { dynamic_variable_placeholders: PLACEHOLDERS },
         prompt: {
           prompt: PROMPT, llm: process.env.ELEVENLABS_LLM || "gpt-4.1", temperature: 0.4, tool_ids: toolIds,
@@ -115,7 +116,11 @@ function agentBody(toolIds, withDataCollection = true) {
           },
         },
       },
-      turn: { turn_timeout: 7 },
+      // Noisy demo rooms: never let background voices cut the agent off mid-sentence, wait for the person to finish,
+      // and don't answer speculatively. The person's words are still transcribed while the agent talks.
+      turn: { turn_timeout: 10, turn_eagerness: "patient", speculative_turn: false, transcribe_on_disabled_interruptions: true },
+      vad: { background_voice_detection: true },
+      conversation: { client_events: ["audio", "agent_response", "user_transcript", "agent_response_correction", "agent_tool_response"] },
       ...(process.env.ELEVENLABS_VOICE_ID ? { tts: { voice_id: process.env.ELEVENLABS_VOICE_ID } } : {}),
     },
     ...(withDataCollection ? { platform_settings: { data_collection: {
