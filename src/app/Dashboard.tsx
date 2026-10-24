@@ -5,7 +5,7 @@ import type { RankedListing } from "@/lib/types";
 import type { Approval, ChatMsg, Thread, TimelineItem } from "@/lib/store";
 
 interface Modes { llm: string; mail: string; calendar: string; craigslist: string; voice: string; agentInbox: string }
-interface S { results: RankedListing[]; flagged: RankedListing[]; timeline: TimelineItem[]; approvals: Approval[]; threads: Thread[]; chat: ChatMsg[];
+interface S { version?: string; results: RankedListing[]; flagged: RankedListing[]; timeline: TimelineItem[]; approvals: Approval[]; threads: Thread[]; chat: ChatMsg[];
   events: { id: string; title: string; start: string; link?: string }[]; modes: Modes; searchReport: { mode: string; total: number } | null }
 
 interface SR { lang: string; interimResults: boolean; onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null; onend: (() => void) | null; start(): void; stop(): void }
@@ -43,14 +43,27 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
   const recRef = useRef<SR | null>(null);
   const chatEnd = useRef<HTMLDivElement | null>(null);
 
-  const refresh = useCallback(async () => { const r = await fetch("/api/state", { cache: "no-store" }); setS((await r.json()) as S); }, []);
+  // Serverless: requests can hit different instances. Keep the newest session we have seen and carry it back.
+  const best = useRef<S | null>(null);
+  const adopt = useCallback((next: S | undefined) => {
+    if (!next) return;
+    const b = best.current;
+    if (b && (b.version ?? "") > (next.version ?? "")) { const merged = { ...b, threads: next.threads, modes: next.modes }; best.current = merged; setS(merged); return; }
+    best.current = next; setS(next);
+  }, []);
+  const refresh = useCallback(async () => { const r = await fetch("/api/state", { cache: "no-store" }); adopt((await r.json()) as S); }, [adopt]);
+  const call = useCallback(async <T,>(url: string, body: Record<string, unknown> = {}) => {
+    const r = await post<T & { state?: S }>(url, { ...body, snapshot: best.current ?? undefined });
+    adopt(r.state);
+    return r;
+  }, [adopt]);
   useEffect(() => { void refresh(); const id = setInterval(() => void refresh(), 2500); return () => clearInterval(id); }, [refresh]);
   const mailLive = s?.modes.mail === "agentmail";
   useEffect(() => {
     if (!mailLive) return;
-    const id = setInterval(() => { void post("/api/mail/poll").then(() => refresh()); }, 15000);
+    const id = setInterval(() => { void call("/api/mail/poll"); }, 15000);
     return () => clearInterval(id);
-  }, [mailLive, refresh]);
+  }, [mailLive, call]);
   useEffect(() => { chatEnd.current?.scrollIntoView({ behavior: "smooth" }); }, [s?.chat.length]);
 
   const say = (text: string) => {
@@ -60,7 +73,7 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
   const send = async (text: string) => {
     if (!text.trim()) return;
     setBusy(true); setInput("");
-    try { const r = await post<{ reply: string }>("/api/agent", { text }); say(r.reply); } finally { setBusy(false); void refresh(); }
+    try { const r = await call<{ reply: string }>("/api/agent", { text }); say(r.reply); } finally { setBusy(false); void refresh(); }
   };
   const mic = () => {
     const w = window as unknown as { SpeechRecognition?: SRCtor; webkitSpeechRecognition?: SRCtor };
@@ -74,7 +87,7 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
   };
   const approve = async (id: string, ok: boolean, answer?: string) => {
     const approval = s?.approvals.find((x) => x.id === id);
-    const r = await post<{ openUrl?: string; error?: string }>("/api/approve", { id, approve: ok, answer, approval });
+    const r = await call<{ openUrl?: string; error?: string }>("/api/approve", { id, approve: ok, answer, approval });
     if (r.openUrl) window.open(r.openUrl, "_blank", "noopener");
     if (r.error) alert(r.error);
     void refresh();
@@ -97,8 +110,8 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
           <span className="pill">Voice: {m.voice}</span>
         </>}
         <span style={{ flex: 1 }} />
-        <button onClick={async () => { await post("/api/mail/poll"); void refresh(); }}>Check mail</button>
-        <button onClick={async () => { await post("/api/reset"); void refresh(); }}>Reset</button>
+        <button onClick={() => void call("/api/mail/poll")}>Check mail</button>
+        <button onClick={async () => { await post("/api/reset"); best.current = null; void refresh(); }}>Reset</button>
       </div>
       <div className="grid">
         <div className="col">

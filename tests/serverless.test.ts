@@ -17,3 +17,16 @@ describe("serverless approvals", () => {
     expect(state().threads).toHaveLength(0);
   });
 });
+
+import { hydrate, version } from "@/lib/store";
+describe("session hydrate", () => {
+  it("a cold instance adopts a newer client snapshot, but never an older one", () => {
+    resetState();
+    const snap = { criteria: null, results: [], flagged: [], approvals: [], searchReport: null, events: [], chat: [{ role: "user", text: "hi", at: "2026-10-24T18:00:00.000Z" }], timeline: [{ id: "t1", at: "2026-10-24T18:00:01.000Z", kind: "info", text: "x" }] };
+    hydrate(snap);
+    expect(state().chat).toHaveLength(1);
+    expect(version(state())).toBe("2026-10-24T18:00:01.000Z");
+    hydrate({ ...snap, chat: [], timeline: [{ id: "t0", at: "2026-10-24T17:00:00.000Z", kind: "info", text: "old" }] });
+    expect(state().chat).toHaveLength(1);
+  });
+});

@@ -53,3 +53,31 @@ export function findListing(id: string): RankedListing | undefined {
   const s = state();
   return s.results.find((r) => r.id === id) ?? s.flagged.find((r) => r.id === id);
 }
+
+/** Monotonic-ish version of the session (newest timeline/chat timestamp). */
+export function version(s: Pick<State, "timeline" | "chat">): string {
+  const a = s.timeline[0]?.at ?? "";
+  const b = s.chat[s.chat.length - 1]?.at ?? "";
+  return a > b ? a : b;
+}
+
+export type SessionSnapshot = Pick<State, "criteria" | "results" | "flagged" | "timeline" | "approvals" | "chat" | "searchReport" | "events">;
+
+/**
+ * Serverless: each request may land on a fresh instance. The browser carries the newest session
+ * snapshot it has seen and we adopt it when it is newer than ours. Mail threads are not part of it
+ * (they are rebuilt from AgentMail). Sending is still gated by approvals + the allowlist server-side.
+ */
+export function hydrate(snap: unknown) {
+  if (!snap || typeof snap !== "object") return;
+  const x = snap as Partial<SessionSnapshot>;
+  if (!Array.isArray(x.timeline) || !Array.isArray(x.chat) || !Array.isArray(x.results) || !Array.isArray(x.flagged) || !Array.isArray(x.approvals)) return;
+  const s = state();
+  if (version({ timeline: x.timeline, chat: x.chat }) <= version(s)) return;
+  Object.assign(s, { criteria: x.criteria ?? null, results: x.results, flagged: x.flagged, timeline: x.timeline.slice(0, 200), approvals: x.approvals.slice(0, 50), chat: x.chat.slice(-60), searchReport: x.searchReport ?? null, events: Array.isArray(x.events) ? x.events : [] });
+}
+
+export function publicState() {
+  const s = state();
+  return { ...s, seenMessageIds: undefined, version: version(s) };
+}
