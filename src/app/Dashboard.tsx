@@ -9,6 +9,7 @@ import { Stats, type StatValues } from "./ui/Stats";
 import { Moment, type MomentData } from "./ui/Moment";
 import { Inbox } from "./ui/Inbox";
 import { Mission } from "./ui/Mission";
+import { XRay } from "./ui/XRay";
 import type { Criteria, RankedListing } from "@/lib/types";
 import type { Approval, ChatMsg, Thread, TimelineItem } from "@/lib/store";
 
@@ -81,6 +82,7 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
   const [mobile, setMobile] = useState<"chat" | "homes" | "inbox">("chat");
   const [hovered, setHovered] = useState<string | null>(null);
   const [moment, setMoment] = useState<MomentData | null>(null);
+  const [xray, setXray] = useState<string | null>(null);
   const recRef = useRef<SR | null>(null);
   const chatEnd = useRef<HTMLDivElement | null>(null);
 
@@ -138,6 +140,18 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
       const m = make(); if (m) fire(m);
     }
   }, [s, threads, fire]);
+
+  // A pasted link that scores risky opens its X-ray right away.
+  const lastAnalyzed = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    if (!s) return;
+    const id = s.analyzedId ?? null;
+    if (lastAnalyzed.current !== undefined && id && id !== lastAnalyzed.current) {
+      const l = [...s.results, ...s.flagged].find((x) => x.id === id);
+      if (l && l.scam.light !== "green") { setXray(id); setTab(l.scam.light === "red" ? "flagged" : "ranked"); setView("list"); }
+    }
+    lastAnalyzed.current = id;
+  }, [s]);
 
   // Rehearsal: ?preview=scam or ?preview=booked shows a moment without sending any email.
   useEffect(() => {
@@ -225,6 +239,7 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
       {elevenLabsAgentId && <Script src="https://unpkg.com/@elevenlabs/convai-widget-embed" strategy="afterInteractive" />}
       <Toaster position="bottom-right" richColors theme="light" closeButton />
       <Moment m={moment} onDone={() => setMoment(null)} />
+      <XRay l={xray ? mapListings.find((x) => x.id === xray) ?? null : null} onClose={() => setXray(null)} />
       <header className="top">
         <div className="brand"><Bot size={36} className="bot-wave" /><h1>Sublet Sniper<small>your personal rental agent</small></h1></div>
         <Stats v={stats} />
@@ -293,7 +308,7 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
             ) : (
               <div className="scroll listings">
                 {searching && <div className="refreshing"><span className="spin" />Searching again…</div>}
-                {list.map((l, i) => <ListingCard key={l.id} l={l} i={tab === "ranked" ? i : undefined} onContact={tab === "ranked" ? (id) => void contact(id) : undefined} pinned={l.id === s?.analyzedId} onHover={setHovered} />)}
+                {list.map((l, i) => <ListingCard key={l.id} l={l} i={tab === "ranked" ? i : undefined} onContact={tab === "ranked" ? (id) => void contact(id) : undefined} pinned={l.id === s?.analyzedId} onHover={setHovered} onXray={setXray} />)}
                 {!list.length && <div className="empty">{tab === "ranked" ? "Nothing safe matched. Try a bigger budget." : "No scams caught in this search."}</div>}
               </div>
             )}

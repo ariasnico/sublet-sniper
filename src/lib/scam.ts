@@ -1,5 +1,5 @@
 import { medianFor, SCAM_RATIO } from "./baselines";
-import type { Light, Listing, ScamResult } from "./types";
+import type { Light, Listing, ScamResult, ScamSignal } from "./types";
 
 export const SCAM_KEYWORDS: { re: RegExp; label: string; weight: number }[] = [
   { re: /\bwire (transfer|the money|me|it|to|into|\$)|\bwiring\b|\bwired? (the )?(money|funds|payment)/i, label: "asks for a wire transfer", weight: 35 },
@@ -52,8 +52,9 @@ export function lightFor(score: number): Light {
 
 export function scoreScam(l: Listing, ctx: ScamContext): ScamResult {
   const reasons: string[] = [];
+  const signals: ScamSignal[] = [];
   let score = 0;
-  const add = (w: number, r: string) => { score += w; reasons.push(r); };
+  const add = (w: number, r: string, extra: Partial<ScamSignal> = {}) => { score += w; reasons.push(r); signals.push({ w, label: r, ...extra }); };
   const text = [l.title, l.body ?? "", ...(ctx.messages ?? [])].join("\n");
 
   // 1. Price far below market after normalization to monthly
@@ -63,19 +64,19 @@ export function scoreScam(l: Listing, ctx: ScamContext): ScamResult {
       const med = medianFor(l.type);
       const pct = Math.round((l.priceMonthly / med) * 100);
       if (l.priceMonthly < med * 0.45 && /^(studio|\d+br)$/.test(l.type) && !/\b(room|roommate|shared|bed in)\b/i.test(l.title))
-        add(55, `$${l.priceMonthly}/mo is only ${pct}% of the SF ${l.type === "unknown" ? "sublet" : l.type} median ($${med}): far too cheap, classic bait price`);
+        add(55, `$${l.priceMonthly}/mo is only ${pct}% of the SF ${l.type === "unknown" ? "sublet" : l.type} median ($${med}): far too cheap, classic bait price`, { price: l.priceMonthly, median: med });
       else if (l.priceMonthly < med * SCAM_RATIO)
-        add(40, `$${l.priceMonthly}/mo is ${Math.round((l.priceMonthly / med) * 100)}% of the SF ${l.type === "unknown" ? "sublet" : l.type} median ($${med}); threshold 60%`);
+        add(40, `$${l.priceMonthly}/mo is ${Math.round((l.priceMonthly / med) * 100)}% of the SF ${l.type === "unknown" ? "sublet" : l.type} median ($${med}); threshold 60%`, { price: l.priceMonthly, median: med });
     }
     if (l.pricePeriod !== "month") reasons.push(`info: price was per ${l.pricePeriod}, normalized to $${l.priceMonthly}/mo`);
   }
   // 2. Keywords in listing body or landlord messages
-  for (const k of SCAM_KEYWORDS) if (k.re.test(text)) add(k.weight, `${k.label} ("${text.match(k.re)?.[0]}")`);
+  for (const k of SCAM_KEYWORDS) if (k.re.test(text)) { const q = text.match(k.re)?.[0]; add(k.weight, `${k.label} ("${q}")`, { quote: q }); }
   // 3. Upfront money above CA AB 12 cap (2x monthly rent)
   if (l.priceMonthly && l.priceMonthly >= 100) {
     const big = moneyAmounts([l.body ?? "", ...(ctx.messages ?? [])].join(" ")).filter((a) => a > 2 * l.priceMonthly! && a < 100000);
     if (big.length && /deposit|first|last|upfront|secure|hold/i.test(text))
-      add(35, `asks $${big[0].toLocaleString("en-US")} upfront, more than 2x monthly rent (CA AB 12 cap)`);
+      add(35, `asks $${big[0].toLocaleString("en-US")} upfront, more than 2x monthly rent (CA AB 12 cap)`, { quote: `$${big[0].toLocaleString("en-US")}` });
   }
   // 4. Duplicate text across different listings (copied ad)
   const mine = shingles(`${l.title} ${l.body ?? ""}`);
@@ -92,7 +93,7 @@ export function scoreScam(l: Listing, ctx: ScamContext): ScamResult {
       if (o.id === l.id || !o.imageHashes?.length) continue;
       for (const a of l.imageHashes) for (const b of o.imageHashes) {
         const d = hamming(a, b);
-        if (d <= 6) { add(20, `photo matches another listing's photo (pHash distance ${d}): "${o.title.slice(0, 50)}"`); break outer; }
+        if (d <= 6) { add(20, `photo matches another listing's photo (pHash distance ${d}): "${o.title.slice(0, 50)}"`, { match: { title: o.title, image: o.images?.[0], distance: d } }); break outer; }
       }
     }
   }
@@ -107,5 +108,5 @@ export function scoreScam(l: Listing, ctx: ScamContext): ScamResult {
 
   const core = reasons.filter((r) => !r.startsWith("info:"));
   if (!core.length) reasons.unshift("no scam signals found (price in market range, no risky payment keywords, no duplicates)");
-  return { light: lightFor(score), score: Math.min(100, score), reasons };
+  return { light: lightFor(score), score: Math.min(100, score), reasons, signals };
 }

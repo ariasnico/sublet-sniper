@@ -18,8 +18,8 @@ export function RiskRing({ score, light, size = 46 }: { score: number; light: Ra
   );
 }
 
-export function ListingCard({ l, i, onContact, pinned, onHover }: { l: RankedListing; i?: number; onContact?: (id: string) => void; pinned?: boolean; onHover?: (id: string | null) => void }) {
-  const [open, setOpen] = useState(l.scam.light === "red");
+export function ListingCard({ l, i, onContact, pinned, onHover, onXray }: { l: RankedListing; i?: number; onContact?: (id: string) => void; pinned?: boolean; onHover?: (id: string | null) => void; onXray?: (id: string) => void }) {
+  const [open, setOpen] = useState(false);
   const [imgOk, setImgOk] = useState(true);
   const [fetched, setFetched] = useState<string | null | undefined>(undefined);
   const [loaded, setLoaded] = useState(false);
@@ -62,7 +62,10 @@ export function ListingCard({ l, i, onContact, pinned, onHover }: { l: RankedLis
         </div>
       </div>
       {l.fit.length > 0 && l.scam.light !== "red" && <div className="lc-fit">{l.fit.slice(0, 3).map((f) => <span key={f}>✓ {f}</span>)}</div>}
-      {l.scam.reasons.length > 0 && <>
+      {l.scam.light !== "green" && onXray ? <div className="lc-xr">
+        <span>{l.scam.reasons.filter((r) => !r.startsWith("info:"))[0]?.replace(/\s*\(pHash.*$/, "")}</span>
+        <button className="xr-btn" onClick={() => onXray(l.id)}>Scam X-ray<em>{(l.scam.signals ?? []).length || l.scam.reasons.length} signal{((l.scam.signals ?? []).length || l.scam.reasons.length) > 1 ? "s" : ""}</em></button>
+      </div> : l.scam.reasons.length > 0 && <>
         <button className="lc-why" onClick={() => setOpen(!open)} aria-expanded={open}>{open ? "Hide" : "Show"} {l.scam.reasons.length} {l.scam.light === "green" ? "note" : "risk signal"}{l.scam.reasons.length > 1 ? "s" : ""}</button>
         {open && <ul className="lc-reasons">{l.scam.reasons.slice(0, 4).map((r) => <li key={r}>{r}</li>)}</ul>}
       </>}

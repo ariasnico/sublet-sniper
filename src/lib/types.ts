@@ -35,7 +35,9 @@ export interface Listing extends RawListing {
 }
 
 export type Light = "green" | "yellow" | "red";
-export interface ScamResult { light: Light; score: number; reasons: string[] }
+/** One scoring signal, kept structured so the UI can explain the score. */
+export interface ScamSignal { w: number; label: string; quote?: string; median?: number; price?: number; match?: { title: string; image?: string; distance: number } }
+export interface ScamResult { light: Light; score: number; reasons: string[]; signals?: ScamSignal[] }
 
 export interface Criteria {
   maxBudget: number | null;
