@@ -11,7 +11,8 @@ import { Inbox, deal } from "./ui/Inbox";
 import { Mission } from "./ui/Mission";
 import type { AutopilotView, CraigslistDraft, NeedsYouItem } from "@/lib/autopilot";
 import { XRay } from "./ui/XRay";
-import { Rich } from "./ui/Rich";
+import { ChatThread } from "./ui/chat/ChatThread";
+import { followUpsFor, type FollowUp } from "./ui/chat/followups";
 import type { Criteria, RankedListing } from "@/lib/types";
 import type { Approval, ChatMsg, Thread, TimelineItem } from "@/lib/store";
 
@@ -49,8 +50,7 @@ const fmt = (iso: string) => new Date(iso).toLocaleString("en-US", { timeZone: L
 const fmtLong = (iso: string) => new Date(iso).toLocaleString("en-US", { timeZone: LA, weekday: "long", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) + " PT";
 const clean = (t: string) => t.replace(/^Viewing: /, "").replace(/^\[DEMO DATA\]\s*/, "");
 const short = (t: string, n = 38) => { const c = clean(t); return c.length > n ? `${c.slice(0, n - 1).trimEnd()}…` : c; };
-const SUGGEST = "Busco 1BR amoblado en SF, menos de $4000, del 1/11 al 15/12";
-const CHIPS = [SUGGEST, "Furnished room near Caltrain under $2,500 for November", "¿Cómo detectás si un aviso es un scam?"];
+const GREETING = "¡Hola Nicolás! Contame qué buscás y yo me encargo: busco, filtro scams, hablo con los dueños y te agendo la visita.";
 const SCAN_STEPS = ["Scanning Craigslist sublets, rooms and apartments", "Normalizing prices to monthly", "Comparing every price to SF medians", "Checking photos for reuse across listings", "Looking for wire, Zelle and out-of-country red flags", "Ranking by fit, distance and dates"];
 const CONSENT = ["Yes, go", "I'll approve each step"];
 const AP_TIP = "On: your agent emails safe landlords, negotiates and books. You only click Reply on real Craigslist listings.";
@@ -146,6 +146,7 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
   const closeXray = useCallback(() => setXray(null), []);
   const recRef = useRef<SR | null>(null);
   const chatEnd = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
   // Serverless: requests can hit different instances. Keep the newest session we have seen and carry it back.
   const best = useRef<S | null>(null);
@@ -372,6 +373,15 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
   const hasResults = (s?.results.length ?? 0) + (s?.flagged.length ?? 0) > 0;
   const chat = s?.chat ?? [];
   const consent = needs.find((n) => n.kind === "autopilot_consent");
+  const consentOpts = consent?.options?.length ? consent.options : CONSENT;
+  const followUps = useMemo(() => followUpsFor({ stage: s?.autopilot?.stage, results: s?.results ?? [], flagged: s?.flagged ?? [], threads, events: s?.events ?? [], consentPending: !!consent?.approvalId }),
+    [s?.autopilot?.stage, s?.results, s?.flagged, s?.events, threads, consent?.approvalId]);
+  const pickFollowUp = (f: FollowUp) => {
+    if (f.consent && consent?.approvalId) { void approve(consent.approvalId, true, consentOpts[0]); return; }
+    if (f.prefill !== undefined) { setInput(f.prefill); requestAnimationFrame(() => { const el = inputRef.current; if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } }); return; }
+    if (f.tab) { setTab(f.tab); setView("list"); }
+    void send(f.text ?? f.label);
+  };
   const events = s?.events ?? [];
   const dealsEmpty = !needs.length && !events.length && !threads.length;
   const needCount = needs.reduce((n, x) => n + (x.items?.length ?? 1), 0);
@@ -422,40 +432,31 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
           <div className="panel chat">
             <div className="ph"><span className="avatar lg"><Bot size={26} /></span><div><h2>Talk to your agent</h2><small>{busy ? <><span className="live-dot" />Working…</> : "Spanish or English, voice or text"}</small></div></div>
             <div className="scroll chat-scroll">
-              {chat.length === 0 && <>
-                <div className="chatline"><span className="avatar"><Bot size={20} /></span><div className="msg assistant">¡Hola Nicolás! Contame qué buscás y yo me encargo: busco, filtro scams, hablo con los dueños y te agendo la visita.</div></div>
-                <div className="chips-col">{CHIPS.map((c, k) => <button key={c} className="suggest" style={{ "--i": k } as React.CSSProperties} onClick={() => void send(c)}>{c}</button>)}</div>
-              </>}
-              {chat.map((c, i) => {
-                // Consecutive messages from one side read as a group: one avatar, on the last bubble, which keeps the tail.
-                const side = (x?: ChatMsg) => x && (x.role === "user" ? "user" : "agent");
-                const head = side(chat[i - 1]) !== side(c), tail = side(chat[i + 1]) !== side(c) && !(typing && c.role !== "user" && i === chat.length - 1);
-                return <div key={i} className={`chatline ${c.role}${c.auto ? " auto" : ""}${head ? "" : " cont"}${tail ? " tail" : ""}`}>{c.role !== "user" && <span className={`avatar${tail ? "" : " hold"}`} aria-hidden={!tail || undefined}>{tail && <Bot size={20} />}</span>}
-                <div className={`msg ${c.role}`}>{c.auto && !chat[i - 1]?.auto && <span className="auto-k"><i aria-hidden="true" />Autopilot update</span>}{c.role === "assistant" ? <Rich text={c.text} /> : c.text}</div></div>;
-              })}
-              {consent?.approvalId && !typing && <div className="chat-cta" role="group" aria-label="Let your agent run on autopilot?">
-                {(consent.options?.length ? consent.options : CONSENT).map((o, k) => <button key={o} className={k === 0 ? "primary sm" : "ghost sm"} onClick={() => void approve(consent.approvalId!, true, o)}>{o}</button>)}
-              </div>}
-              {typing && <div className={`chatline assistant tail${lastMsg && lastMsg.role !== "user" ? " cont" : ""}`} aria-label="Your agent is typing"><span className="avatar"><Bot size={20} /></span><div className="msg assistant typing"><i /><i /><i /></div></div>}
+              <ChatThread chat={chat} greeting={GREETING} typing={typing} idle={!busy && !listening}
+                consent={consent?.approvalId ? { options: consentOpts, onPick: (o) => void approve(consent.approvalId!, true, o) } : undefined}
+                followUps={followUps} onFollowUp={pickFollowUp} onRetry={(t) => void send(t)} />
               <div ref={chatEnd} />
             </div>
             {(listening || heard) && <div className={`listen${listening ? " on" : ""}`} aria-live="polite">
               <div className="wave" aria-hidden="true">{Array.from({ length: 24 }, (_, i) => <i key={i} style={{ animationDelay: `${(i * 73) % 600}ms` }} />)}</div>
               <p>{heard || (lang.startsWith("es") ? "Te escucho…" : "Listening…")}</p>
             </div>}
-            <form className="composer" onSubmit={(e) => { e.preventDefault(); void send(input); }}>
-              <button type="button" className={`mic ${listening ? "on" : ""}`} onClick={mic} title={listening ? "Stop" : "Talk"} aria-label="Talk">
-                {listening ? <span className="bars"><i /><i /><i /><i /></span> : <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" /></svg>}
-              </button>
-              <textarea rows={2} value={input} onChange={(e) => setInput(e.target.value)} aria-label="Message your agent"
+            <form className="composer c-composer" onSubmit={(e) => { e.preventDefault(); void send(input); }}>
+              <textarea ref={inputRef} rows={2} value={input} onChange={(e) => setInput(e.target.value)} aria-label="Message your agent"
                 onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send(input); } }}
                 placeholder={listening ? "Listening…" : narrow ? "Describe the place, or paste a Craigslist link" : "Describe the place you want, or paste a Craigslist link"} disabled={busy} />
-              <button className="primary send" disabled={busy || !input.trim()} aria-label="Send"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 12h14M13 6l6 6-6 6" stroke="currentColor" strokeWidth="2.2" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
+              <div className="c-tools">
+                <button type="button" className={`mic ${listening ? "on" : ""}`} onClick={mic} data-tip={listening ? "Stop" : "Talk"} aria-label={listening ? "Stop listening" : "Talk"}>
+                  {listening ? <span className="bars"><i /><i /><i /><i /></span> : <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" /></svg>}
+                </button>
+                <button type="button" className={`c-tool${speak ? " on" : ""}`} aria-pressed={speak} aria-label="Speak replies" data-tip={speak ? "Speaking replies" : "Replies muted"} onClick={() => setSpeak(!speak)}>
+                  <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" />{speak ? <path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" /> : <path d="M16 9.5l5 5M21 9.5l-5 5" />}</svg>
+                </button>
+                <select className="c-lang" value={lang} onChange={(e) => setLang(e.target.value)} aria-label="Voice language"><option value="es-AR">Español</option><option value="en-US">English</option></select>
+                <span className="grow" />
+                <button className="send" disabled={busy || !input.trim()} aria-label="Send"><svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6" stroke="currentColor" strokeWidth="2.2" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
+              </div>
             </form>
-            <div className="chat-opts">
-              <label><input type="checkbox" checked={speak} onChange={(e) => setSpeak(e.target.checked)} /> Speak replies</label>
-              <select value={lang} onChange={(e) => setLang(e.target.value)} aria-label="Voice language"><option value="es-AR">Español</option><option value="en-US">English</option></select>
-            </div>
             {elevenLabsAgentId && createElement("elevenlabs-convai", { "agent-id": elevenLabsAgentId })}
           </div>
         </section>
