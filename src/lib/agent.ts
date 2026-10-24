@@ -22,7 +22,7 @@ async function mockAgent(text: string): Promise<string> {
   const s = state();
   const es = isSpanish(text);
   const t = text.toLowerCase();
-  const pick = () => { const i = idx(t); if (i != null) return s.results[i]; if (/demo|mission bay/.test(t)) return s.results.find((r) => r.demo); return s.results[0]; };
+  const pick = () => { const byId = [...s.results, ...s.flagged].find((r) => text.includes(r.id)); if (byId) return byId; const i = idx(t); if (i != null) return s.results[i]; if (/demo|mission bay/.test(t)) return s.results.find((r) => r.demo); return s.results[0]; };
 
   if (/(contact|escrib|mand|send|reach out|email)/.test(t) && s.results.length) {
     const l = pick();
