@@ -1,0 +1,35 @@
+# Sublet Sniper
+
+> A personal rental agent for short-term rentals (sublets, rooms, apartments) in San Francisco. It searches live Craigslist, ranks matches against your budget and dates, scam-scores every listing with an explained traffic light (green / yellow / red, 0-100), talks to landlords, negotiates inside your budget, refuses deposits before a viewing, and books the viewing. Humans use the web app; AI agents use the same capabilities over MCP.
+
+Web app: https://sublet-sniper.vercel.app
+
+## Connect your agent (MCP)
+
+- Endpoint: https://sublet-sniper.vercel.app/api/mcp (Streamable HTTP, stateless)
+- Claude Code: `claude mcp add --transport http sublet-sniper https://sublet-sniper.vercel.app/api/mcp`
+- Claude Desktop / claude.ai: Settings > Connectors > Add custom connector > URL above
+- ChatGPT: Settings > Apps & Connectors > Advanced > Developer mode > Create connector > URL above, no authentication
+- Auth: open in demo mode. If the operator sets MCP_TOKEN, send `Authorization: Bearer <token>`.
+
+## Tools
+
+- search_sublets({ query?, maxBudget?, type?, furnished?, from?, to?, near? }): top safe matches (id, title, price per month, neighborhood, scam score and light, url, photo) plus a summary of scams caught. `type` is one of room, studio, 1br, 2br, 3br+. Dates are YYYY-MM-DD. `near` is a place like "Caltrain" or "UCSF".
+- check_listing_scam({ url }): fetch one Craigslist listing and return its scam score, light, structured signals and a one-line verdict. Craigslist URLs only.
+- contact_landlord({ listingId }): send the first message. Only the labeled demo listing is emailed automatically; for real Craigslist listings you get the drafted message and the URL, and a human must click Reply.
+- get_deals(): landlord threads with status, price negotiation (listed / asked / offered), safety checks, and booked viewings with a Google Calendar link.
+- ask_agent({ message }): talk to the same agent as the web chat (English or Spanish).
+
+## Typical flow
+
+1. search_sublets with the renter's request.
+2. check_listing_scam on any Craigslist URL the renter pastes.
+3. contact_landlord on a green match.
+4. get_deals to follow the negotiation and the booked viewing.
+
+## Rules the agent follows
+
+- Never pay or ask anyone to pay (deposit, Zelle, wire, gift cards, crypto) before an in-person or live-video viewing and a written sublease.
+- Real Craigslist landlords are contacted only by a human clicking Reply. No captcha solving, no automated Craigslist contact.
+- Email goes only to an allowlisted demo landlord address.
+- Scam scores are heuristic and explained, not a guarantee.
