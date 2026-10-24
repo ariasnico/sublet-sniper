@@ -120,7 +120,7 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
             <div className="scroll">
               {(s?.chat ?? []).length === 0 && <div className="m" style={{ color: "var(--mute)" }}>Try: <a href="#" onClick={(e) => { e.preventDefault(); void send(SUGGEST); }}>{SUGGEST}</a></div>}
               {s?.chat.map((c, i) => <div key={i} className={`msg ${c.role}`}>{c.text}</div>)}
-              {busy && <div className="msg assistant">…</div>}
+              {busy && <div className="msg assistant typing"><i /><i /><i /></div>}
               <div ref={chatEnd} />
             </div>
             <form className="row" style={{ marginTop: 8 }} onSubmit={(e) => { e.preventDefault(); void send(input); }}>
@@ -170,7 +170,7 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
                   </div>
                 </div>))}
               {!pending.length && <div style={{ color: "var(--mute)" }}>Nothing needs you right now.</div>}
-              {s?.events.map((e) => <div key={e.id} className="card">📅 {e.title}<div className="m">{fmt(e.start)} {e.link && <a href={e.link} target="_blank" rel="noreferrer">open</a>}</div></div>)}
+              {s?.events.map((e) => <div key={e.id} className="card booked"><div className="bk">✅ Viewing booked</div><div className="t">{e.title.replace(/^Viewing: /, "")}</div><div className="when">{fmt(e.start)}</div>{e.link ? <a href={e.link} target="_blank" rel="noreferrer">Open in Google Calendar</a> : <div className="m">On your calendar · pay nothing before seeing it</div>}</div>)}
             </div>
           </div>
           <div className="panel" style={{ flex: 1 }}>
@@ -181,7 +181,7 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
             <div className="scroll">
               {s?.threads.map((t) => (
                 <div key={t.id} className="card thread">
-                  <div className="t">{t.listingTitle} <span className="pill">{t.status}</span></div>
+                  <div className="t">{t.listingTitle} <span className={`pill st-${t.status}`}>{({ awaiting_landlord: "⏳ waiting on landlord", active: "💬 talking", viewing_proposed: "🗓 slots offered", booked: "✅ viewing booked", flagged: "🚩 scam refused" } as Record<string, string>)[t.status] ?? t.status}</span></div>
                   <div className="m">{t.landlordEmail} · agent inbox {m?.agentInbox}</div>
                   {t.messages.map((x, i) => <div key={i} className={`msg ${x.from === "landlord" ? "lm" : "am"}`}><b>{x.from === "landlord" ? "Landlord" : "Agent"}:</b> {x.text}
                     {x.flagged && <div className="flagnote">🚩 {x.flagged.join(" · ")}</div>}</div>)}
