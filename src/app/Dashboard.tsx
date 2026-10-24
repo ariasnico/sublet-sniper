@@ -7,7 +7,7 @@ import type { RankedListing } from "@/lib/types";
 import type { Approval, ChatMsg, Thread, TimelineItem } from "@/lib/store";
 
 interface Modes { llm: string; mail: string; calendar: string; craigslist: string; voice: string; agentInbox: string }
-interface S { version?: string; results: RankedListing[]; flagged: RankedListing[]; timeline: TimelineItem[]; approvals: Approval[]; threads: Thread[]; chat: ChatMsg[];
+interface S { version?: string; analyzedId?: string | null; results: RankedListing[]; flagged: RankedListing[]; timeline: TimelineItem[]; approvals: Approval[]; threads: Thread[]; chat: ChatMsg[];
   events: { id: string; title: string; start: string; link?: string }[]; modes: Modes; searchReport: { mode: string; total: number } | null }
 
 interface SR { lang: string; interimResults: boolean; onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null; onend: (() => void) | null; start(): void; stop(): void }
@@ -17,14 +17,15 @@ const fmt = (iso: string) => new Date(iso).toLocaleString("en-US", { timeZone: "
 const ICON: Record<string, string> = { search: "🔎", scam: "🛡️", draft: "✍️", email_out: "📤", email_in: "📩", calendar: "📅", decision: "🤔", flag: "🚩" };
 const SUGGEST = "Busco depto amoblado cerca de Caltrain, menos de $4k, del 1/11 al 15/12";
 
-async function post<T>(url: string, body?: unknown): Promise<T> {
-  const r = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body ?? {}) });
+async function post<T>(url: string, body?: unknown, timeoutMs = 60000): Promise<T> {
+  const r = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body ?? {}), signal: AbortSignal.timeout(timeoutMs) });
   return (await r.json()) as T;
 }
 
-function ListingCard({ l, i, onContact }: { l: RankedListing; i?: number; onContact?: (id: string) => void }) {
+function ListingCard({ l, i, onContact, pinned }: { l: RankedListing; i?: number; onContact?: (id: string) => void; pinned?: boolean }) {
   return (
-    <div className={`card ${l.scam.light}`}>
+    <div className={`card ${l.scam.light}${pinned ? " pinned" : ""}`}>
+      {pinned && <div className="pin">🔎 Your link · scam risk <b>{l.scam.score}/100</b> · {l.scam.light === "red" ? "HIGH" : l.scam.light === "yellow" ? "CAUTION" : "LOW"}</div>}
       <div className="t"><span className={`light ${l.scam.light}`} />{i != null ? `#${i + 1} ` : ""}<a href={l.url} target="_blank" rel="noreferrer">{l.title}</a>
         {l.demo && <span className="tag">DEMO DATA</span>}</div>
       <div className="m"><span className="price">${l.priceMonthly?.toLocaleString("en-US") ?? "?"}/mo</span> · {l.type} · {l.neighborhood ?? l.hood ?? "SF"}{l.distanceKm != null ? ` · ${l.distanceKm.toFixed(1)} km` : ""} · {l.source} · score {l.score}{l.furnished ? " · furnished" : ""}</div>
@@ -87,11 +88,20 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
     if (!speak || typeof window === "undefined" || !("speechSynthesis" in window)) return;
     const u = new SpeechSynthesisUtterance(text.replace(/https?:\S+/g, "")); u.lang = lang; window.speechSynthesis.cancel(); window.speechSynthesis.speak(u);
   };
+  const sentAt = useRef("");
   const send = async (text: string) => {
     if (!text.trim()) return;
-    setBusy(true); setInput("");
-    try { const r = await call<{ reply: string }>("/api/agent", { text }); say(r.reply); } finally { setBusy(false); void refresh(); }
+    sentAt.current = new Date().toISOString(); setBusy(true); setInput("");
+    try { const r = await call<{ reply: string }>("/api/agent", { text }); if (r.reply) say(r.reply); }
+    catch { toast.error("The agent took too long", { description: "Try again in a moment." }); }
+    finally { setBusy(false); void refresh(); }
   };
+  const lastMsg = s?.chat[s.chat.length - 1];
+  const typing = busy && !(lastMsg?.role === "assistant" && lastMsg.at > sentAt.current);
+  // Reset hides AgentMail threads with no activity after the reset (they're rebuilt from the inbox).
+  const [resetAt, setResetAt] = useState("");
+  useEffect(() => { setResetAt(localStorage.getItem("sniper-reset-at") ?? ""); }, []);
+  const threads = (s?.threads ?? []).filter((t) => !resetAt || t.messages.some((x) => x.at > resetAt));
   const mic = () => {
     const w = window as unknown as { SpeechRecognition?: SRCtor; webkitSpeechRecognition?: SRCtor };
     const C = w.SpeechRecognition ?? w.webkitSpeechRecognition;
@@ -129,7 +139,7 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
         </>}
         <span style={{ flex: 1 }} />
         <button onClick={() => void call("/api/mail/poll")}>Check mail</button>
-        <button onClick={async () => { await post("/api/reset"); best.current = null; void refresh(); }}>Reset</button>
+        <button onClick={async () => { const at = new Date().toISOString(); localStorage.setItem("sniper-reset-at", at); setResetAt(at); await post("/api/reset"); best.current = null; void refresh(); }}>Reset</button>
       </div>
       <div className="grid">
         <div className="col">
@@ -139,7 +149,7 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
               {(s?.chat ?? []).length === 0 && <div className="chatline"><span className="avatar"><Bot size={20} /></span><div className="msg assistant">Hola Nicolás! Tell me what you&apos;re looking for. Try:</div></div>}
               {(s?.chat ?? []).length === 0 && <button className="suggest" onClick={() => void send(SUGGEST)}>“{SUGGEST}”</button>}
               {s?.chat.map((c, i) => <div key={i} className={`chatline ${c.role}`}>{c.role !== "user" && <span className="avatar"><Bot size={20} /></span>}<div className={`msg ${c.role}`}>{c.text}</div></div>)}
-              {busy && <div className="chatline"><span className="avatar"><Bot size={20} /></span><div className="msg assistant typing"><i /><i /><i /></div></div>}
+              {typing && <div className="chatline"><span className="avatar"><Bot size={20} /></span><div className="msg assistant typing"><i /><i /><i /></div></div>}
               <div ref={chatEnd} />
             </div>
             <form className="row" style={{ marginTop: 8 }} onSubmit={(e) => { e.preventDefault(); void send(input); }}>
@@ -169,7 +179,7 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
               {s?.searchReport && <span className="pill">{s.searchReport.total} scanned · {s.searchReport.mode}</span>}
             </div>
             <div className="scroll">
-              {tab === "ranked" ? s?.results.map((l, i) => <ListingCard key={l.id} l={l} i={i} onContact={contact} />) : s?.flagged.map((l) => <ListingCard key={l.id} l={l} />)}
+              {tab === "ranked" ? s?.results.map((l, i) => <ListingCard key={l.id} l={l} i={i} onContact={contact} pinned={l.id === s?.analyzedId} />) : s?.flagged.map((l) => <ListingCard key={l.id} l={l} pinned={l.id === s?.analyzedId} />)}
               {s && !s.results.length && <div className="empty">No search yet. Talk to the agent.</div>}
             </div>
           </div>
@@ -195,18 +205,18 @@ export default function Dashboard({ elevenLabsAgentId }: { elevenLabsAgentId: st
           </div>
           <div className="panel" style={{ flex: 1 }}>
             <h2>Landlord threads</h2>
-            {m?.mail === "mock" && s?.threads.length ? <div className="sim">
+            {m?.mail === "mock" && threads.length ? <div className="sim">
               <span>Simulate DEMO landlord:</span>
               {["hello", "video", "slot", "scam"].map((p) => <button key={p} onClick={() => void landlord(p)}>{p}</button>)}</div> : null}
             <div className="scroll">
-              {s?.threads.map((t) => (
+              {threads.map((t) => (
                 <div key={t.id} className="card thread">
                   <div className="t">{t.listingTitle} <span className={`pill st-${t.status}`}>{({ awaiting_landlord: "⏳ waiting on landlord", active: "💬 talking", viewing_proposed: "🗓 slots offered", booked: "✅ viewing booked", flagged: "🚩 scam refused" } as Record<string, string>)[t.status] ?? t.status}</span></div>
                   <div className="m">{t.landlordEmail} · agent inbox {m?.agentInbox}</div>
                   {t.messages.map((x, i) => <div key={i} className={`msg ${x.from === "landlord" ? "lm" : "am"}${x.flagged ? " flagged" : ""}`}><span className="who">{x.from === "landlord" ? "Landlord" : "🤖 Agent (as Nicolás)"}</span>{x.text}
                     {x.flagged && <div className="flagnote">🚩 {x.flagged.join(" · ")}</div>}</div>)}
                 </div>))}
-              {!s?.threads.length && <div className="empty">No conversations yet. Approve a contact for the DEMO listing.</div>}
+              {!threads.length && <div className="empty">No conversations yet. Approve a contact for the DEMO listing.</div>}
             </div>
           </div>
         </div>

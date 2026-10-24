@@ -11,6 +11,7 @@ export interface RawListing {
   hood: string | null;
   category?: "sub" | "roo" | "apa";
   body?: string;
+  address?: string;
   attrs?: string[];
   lat?: number;
   lon?: number;

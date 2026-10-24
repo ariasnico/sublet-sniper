@@ -61,7 +61,10 @@ export function scoreScam(l: Listing, ctx: ScamContext): ScamResult {
     if (l.priceMonthly < 100) add(20, `price $${l.priceMonthly} looks like a placeholder`);
     else {
       const med = medianFor(l.type);
-      if (l.priceMonthly < med * SCAM_RATIO)
+      const pct = Math.round((l.priceMonthly / med) * 100);
+      if (l.priceMonthly < med * 0.45 && /^(studio|\d+br)$/.test(l.type) && !/\b(room|roommate|shared|bed in)\b/i.test(l.title))
+        add(55, `$${l.priceMonthly}/mo is only ${pct}% of the SF ${l.type === "unknown" ? "sublet" : l.type} median ($${med}): far too cheap, classic bait price`);
+      else if (l.priceMonthly < med * SCAM_RATIO)
         add(40, `$${l.priceMonthly}/mo is ${Math.round((l.priceMonthly / med) * 100)}% of the SF ${l.type === "unknown" ? "sublet" : l.type} median ($${med}); threshold 60%`);
     }
     if (l.pricePeriod !== "month") reasons.push(`info: price was per ${l.pricePeriod}, normalized to $${l.priceMonthly}/mo`);

@@ -1,5 +1,8 @@
 import { parseCriteria } from "./criteria";
 import { searchListings } from "./search";
+import { fetchListingPage, snapshotListings } from "./sources/craigslist";
+import { normalizeHeuristic } from "./normalize";
+import { rankListings } from "./rank";
 import { llmNormalize } from "./llm-normalize";
 import { llmProvider } from "./config";
 import { proposeSlots, bookViewing, slotInWindow, type Slot } from "./calendar";
@@ -9,10 +12,11 @@ import { emailAllowed, firstContact, parseWindow, planReply, writeReply, detectR
 import { fmtLA } from "./time";
 import { findListing, log, now, state, uid, type Approval, type Thread } from "./store";
 import { PLACES } from "./geo";
-import type { Criteria, ListingType, RankedListing } from "./types";
+import type { Criteria, ListingType, RankedListing, RawListing } from "./types";
 import type { ToolDef } from "./llm";
 
 export const TOOL_DEFS: ToolDef[] = [
+  { name: "analyze_listing_url", description: "Fetch ONE Craigslist listing URL the user pasted and scam-check it (price vs neighborhood median, keywords, duplicate text/photos). Always use this when the user sends a listing link.", parameters: { type: "object", properties: { url: { type: "string" } }, required: ["url"] } },
   { name: "search_listings", description: "Search live Craigslist SF (sublets, rooms, apartments; snapshot fallback) plus the X snapshot and demo fixtures. Normalizes, scam-scores and ranks. Returns top results and red-flagged listings.",
     parameters: { type: "object", properties: {
       query: { type: "string", description: "The user's request in their own words" },
@@ -55,14 +59,38 @@ function mergeCriteria(base: Criteria, input: Record<string, unknown>): Criteria
 export async function toolSearch(input: Record<string, unknown>) {
   const s = state();
   const c = mergeCriteria(parseCriteria(str(input.query) ?? ""), input);
+  // The LLM sometimes drops the budget on follow-up searches: keep the last known one.
+  if (!c.maxBudget) c.maxBudget = s.criteria?.maxBudget ?? [...s.chat].reverse().map((m) => m.role === "user" ? parseCriteria(m.text).maxBudget : null).find((b) => b) ?? null;
   if (c.maxBudget) s.profile.maxBudget = c.maxBudget;
   if (c.from) s.profile.moveIn = c.from;
   if (c.to) s.profile.moveOut = c.to;
-  const { results, flagged, report } = await searchListings(c);
+  const out = await searchListings(c);
+  const { flagged, report } = out;
+  const results = out.results.filter((r) => !c.maxBudget || r.priceMonthly == null || r.priceMonthly <= c.maxBudget * 1.1);
   s.criteria = c; s.results = results; s.flagged = flagged; s.searchReport = report;
   log("search", `Searched ${report.total} listings (Craigslist ${report.mode}, ${report.x} X posts, ${report.demo} demo). ${results.length} shown, ${flagged.length} flagged red.`);
   for (const f of flagged.slice(0, 2)) log("scam", `RED: "${f.title}" ${f.scam.reasons.slice(0, 2).join("; ")}`);
   return { criteria: c, mode: report.mode, top: results.slice(0, 6).map(brief), flagged: flagged.slice(0, 3).map(brief) };
+}
+
+export const CL_URL = /https?:\/\/[a-z.]*craigslist\.org\/[^\s)>"']+/i;
+
+/** Fetches and scam-scores one pasted Craigslist listing; pins it on top of the board with its score. */
+export async function toolAnalyzeUrl(input: Record<string, unknown>, fetcher: (url: string) => Promise<RawListing> = fetchListingPage) {
+  const s = state();
+  const url = str(input.url)?.match(CL_URL)?.[0];
+  if (!url) return { error: "not a Craigslist listing URL" };
+  let raw: RawListing;
+  try { raw = await fetcher(url); } catch (e) { log("info", `Couldn't fetch ${url}: ${(e as Error).message}`); return { error: `couldn't fetch listing (${(e as Error).message})` }; }
+  const corpus = [...s.results, ...s.flagged, ...snapshotListings().map(normalizeHeuristic)];
+  const [ranked] = rankListings([normalizeHeuristic(raw), ...corpus.filter((x) => x.id !== raw.id)], parseCriteria("")).filter((x) => x.id === raw.id);
+  if (!ranked) return { error: "listing is outside San Francisco" };
+  const l: RankedListing = { ...ranked, fit: [`analyzed from your link${raw.address ? ` · ${raw.address}` : ""}`, ...(raw.images?.length ? [`${raw.images.length} photos checked`] : [])] };
+  s.results = [l, ...s.results.filter((x) => x.id !== l.id)];
+  if (l.scam.light === "red") s.flagged = [l, ...s.flagged.filter((x) => x.id !== l.id)];
+  s.analyzedId = l.id;
+  log(l.scam.light === "red" ? "flag" : "scam", `Analyzed link "${l.title}": ${l.scam.light.toUpperCase()} ${l.scam.score}/100. ${l.scam.reasons[0]}`);
+  return { ...brief(l), address: raw.address ?? null, scamScore: l.scam.score, photos: raw.images?.length ?? 0 };
 }
 
 async function toolNormalize(input: Record<string, unknown>) {
@@ -154,6 +182,7 @@ function toolStatus() {
 
 export async function execTool(name: string, input: Record<string, unknown>): Promise<unknown> {
   switch (name) {
+    case "analyze_listing_url": return toolAnalyzeUrl(input);
     case "search_listings": return toolSearch(input);
     case "normalize_listing": return toolNormalize(input);
     case "rank_listings": return toolRank(input);

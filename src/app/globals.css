@@ -128,3 +128,10 @@ select { width: auto; padding: 4px 8px; }
 }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
 @media (max-width: 1100px) { .grid { grid-template-columns: 1fr; height: auto; } }
+
+/* Pasted-link analysis card */
+.card.pinned { box-shadow: 0 0 0 2px var(--accent, #f97316), 0 6px 18px rgba(249,115,22,.15); animation: pin-in 260ms cubic-bezier(0.23,1,0.32,1); }
+.card .pin { font-size: 12px; font-weight: 600; margin-bottom: 6px; color: #9a3412; }
+.card.red .pin { color: #b91c1c; }
+@keyframes pin-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .card.pinned { animation: none; } }

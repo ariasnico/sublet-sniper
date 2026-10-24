@@ -19,7 +19,7 @@ export interface RenterProfile {
   pets: string; smoker: boolean; references: string; about: string;
 }
 export interface State {
-  profile: RenterProfile; criteria: Criteria | null; results: RankedListing[]; flagged: RankedListing[];
+  profile: RenterProfile; criteria: Criteria | null; results: RankedListing[]; flagged: RankedListing[]; analyzedId?: string | null;
   timeline: TimelineItem[]; approvals: Approval[]; threads: Thread[]; chat: ChatMsg[];
   searchReport: { mode: string; total: number; x: number; demo: number; perCategory: Record<string, number | string> } | null; seenMessageIds: string[]; events: { id: string; title: string; start: string; end: string; link?: string }[];
 }
@@ -61,7 +61,7 @@ export function version(s: Pick<State, "timeline" | "chat">): string {
   return a > b ? a : b;
 }
 
-export type SessionSnapshot = Pick<State, "criteria" | "results" | "flagged" | "timeline" | "approvals" | "chat" | "searchReport" | "events">;
+export type SessionSnapshot = Pick<State, "criteria" | "results" | "flagged" | "timeline" | "approvals" | "chat" | "searchReport" | "events" | "analyzedId">;
 
 /**
  * Serverless: each request may land on a fresh instance. The browser carries the newest session
@@ -74,7 +74,7 @@ export function hydrate(snap: unknown) {
   if (!Array.isArray(x.timeline) || !Array.isArray(x.chat) || !Array.isArray(x.results) || !Array.isArray(x.flagged) || !Array.isArray(x.approvals)) return;
   const s = state();
   if (version({ timeline: x.timeline, chat: x.chat }) <= version(s)) return;
-  Object.assign(s, { criteria: x.criteria ?? null, results: x.results, flagged: x.flagged, timeline: x.timeline.slice(0, 200), approvals: x.approvals.slice(0, 50), chat: x.chat.slice(-60), searchReport: x.searchReport ?? null, events: Array.isArray(x.events) ? x.events : [] });
+  Object.assign(s, { criteria: x.criteria ?? null, results: x.results, flagged: x.flagged, timeline: x.timeline.slice(0, 200), approvals: x.approvals.slice(0, 50), chat: x.chat.slice(-60), searchReport: x.searchReport ?? null, events: Array.isArray(x.events) ? x.events : [], analyzedId: x.analyzedId ?? null });
 }
 
 export function publicState() {

@@ -1,3 +1,4 @@
+import { CL_URL, toolAnalyzeUrl } from "./tools";
 import { runToolLoop, type Turn } from "./llm";
 import { TOOL_DEFS, execTool, toolSearch, toolDraftContact, brief } from "./tools";
 import { log, now, state } from "./store";
@@ -58,6 +59,20 @@ export async function chat(text: string): Promise<string> {
   s.chat.push({ role: "user", text, at: now() });
   const history: Turn[] = s.chat.slice(-12).map((m) => ({ role: m.role, text: m.text }));
   let reply: string | null = null;
+  const link = text.match(CL_URL)?.[0];
+  if (link) {
+    // Deterministic: a pasted listing link is always fetched + scam-checked, no LLM needed.
+    const r = await toolAnalyzeUrl({ url: link }) as Record<string, unknown> & { error?: string };
+    const es = /[áéíóúñ¿]|\b(es|esto|una|estafa|este|mir[aá])\b/i.test(text) || !/[a-z]{3,}/i.test(text.replace(link, ""));
+    if (r.error) reply = es ? `No pude abrir ese link (${r.error}).` : `I couldn't open that link (${r.error}).`;
+    else {
+      const l = s.results[0]; const reasons = l.scam.reasons.slice(0, 3);
+      const verdict = { red: es ? "🔴 ALTO RIESGO de estafa" : "🔴 HIGH scam risk", yellow: es ? "🟡 Precaución" : "🟡 Caution", green: es ? "🟢 Se ve legítimo" : "🟢 Looks legit" }[l.scam.light];
+      reply = `${verdict} (${l.scam.score}/100): "${l.title}", ${l.priceMonthly ? `$${l.priceMonthly}/mo` : "?"}${r.address ? `, ${r.address}` : ""}.\n` + (reasons.length ? reasons.map((x) => `• ${x}`).join("\n") : es ? "• Sin señales de alerta." : "• No red flags found.") + (l.scam.light === "red" ? (es ? "\nNo mandes plata ni datos. No lo voy a contactar." : "\nDon't send money or personal info. I won't contact it.") : es ? "\n¿Querés que le escriba al dueño?" : "\nWant me to message the landlord?");
+    }
+    s.chat.push({ role: "assistant", text: reply, at: now() });
+    return reply;
+  }
   try {
     const ctx = (s.results.length ? `\n\nCurrent results (#1..): ${JSON.stringify(s.results.slice(0, 8).map(brief))}` : "") + (s.flagged.length ? `\n\nRed-flagged listings (hidden from results, explain them with score_scam): ${JSON.stringify(s.flagged.slice(0, 4).map(brief))}` : "");
     reply = await runToolLoop(SYSTEM() + ctx, history, TOOL_DEFS, execTool);

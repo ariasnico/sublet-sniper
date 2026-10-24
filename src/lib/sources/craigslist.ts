@@ -64,6 +64,27 @@ export function parseDetailHtml(b: string) {
   };
 }
 
+/** Parses one Craigslist listing page (title, price, housing, address, hood, body, photos). */
+export function parseListingPage(html: string, url: string): RawListing {
+  const g = (re: RegExp) => html.match(re)?.[1]?.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  const d = parseDetailHtml(html);
+  const housing = g(/<span class="housing">([\s\S]*?)<\/span>/)?.replace(/[\s/-]+$/, "").replace(/^[\s/-]+/, "");
+  const address = g(/<h2 class="street-address">([\s\S]*?)<\/h2>/);
+  const hood = g(/<span id="titletextonly">[\s\S]*?<\/span>\s*<span>\s*\(([^)]*)\)/);
+  const title = decode(g(/<span id="titletextonly">([\s\S]*?)<\/span>/) ?? g(/<title>([\s\S]*?)<\/title>/) ?? "Craigslist listing");
+  const id = postId(url.replace(/\?.*$/, ""));
+  return {
+    id: `cl-${id}`, source: "craigslist", url, title: [title, housing].filter(Boolean).join(" · "), priceText: g(/<span class="price">([^<]*)/) ?? null,
+    hood: hood ? decode(hood) : null, category: /\/(sub|roo|apa)\//.exec(url)?.[1] as Cat | undefined ?? "apa",
+    body: [address ? `Address: ${address}.` : "", d.body ?? ""].join(" ").trim(), attrs: [housing ?? "", ...d.attrs].filter(Boolean), images: d.images, posted: d.posted ?? undefined,
+    lat: d.lat ? Number(d.lat) : undefined, lon: d.lon ? Number(d.lon) : undefined, imageHashes: hashesByListing.get(id), address,
+  } as RawListing;
+}
+
+export async function fetchListingPage(url: string): Promise<RawListing> {
+  return parseListingPage(await politeGet(url), url);
+}
+
 // ---- polite live fetching: one request at a time, >=3s apart, 10 min cache ----
 let last = 0;
 let chain: Promise<unknown> = Promise.resolve();

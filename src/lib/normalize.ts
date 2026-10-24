@@ -65,6 +65,9 @@ export function isInSF(r: Pick<RawListing, "hood" | "url" | "title" | "lat" | "l
 
 export function toMonthly(price: number | null, period: PricePeriod, nights?: number): number | null {
   if (price == null) return null;
+  // Sanity: SF weekly/nightly rates above these are almost always monthly prices mislabeled by a keyword in the body.
+  if (period === "week" && price >= 1500) period = "month";
+  if (period === "night" && price >= 400) period = "month";
   switch (period) {
     case "month": return price;
     case "week": return Math.round((price * 52) / 12);
