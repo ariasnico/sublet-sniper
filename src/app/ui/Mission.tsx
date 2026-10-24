@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Criteria } from "@/lib/types";
 import type { Thread } from "@/lib/store";
 import { useCountUp } from "./Stats";
@@ -22,6 +22,27 @@ function useSearchBeat(searching: boolean, caught: number) {
     return () => clearInterval(id);
   }, [searching]);
   return searching ? beats[i % beats.length] : null;
+}
+
+/** Crossfade a line of text when it changes: the old copy slides up and out (150ms) while the new one rises in (200ms).
+ *  Both sit in the same grid cell, so the strip never jumps; each copy truncates on its own. */
+function Swap({ text, className }: { text: string; className: string }) {
+  const [items, setItems] = useState<{ id: number; text: string; out?: boolean }[]>([{ id: 0, text }]);
+  const last = useRef(text);
+  const seq = useRef(0);
+  useEffect(() => {
+    if (text === last.current) return;
+    last.current = text;
+    const id = ++seq.current;
+    setItems((xs) => [...xs.slice(-1).map((x) => ({ ...x, out: true })), { id, text }]);
+    const t = setTimeout(() => setItems((xs) => xs.filter((x) => x.id === id)), 160);
+    return () => clearTimeout(t);
+  }, [text]);
+  return (
+    <span className={`${className} swap`}>
+      {items.map((x) => <span key={x.id} className={x.out ? "out" : x.id ? "in" : undefined} aria-hidden={x.out || undefined} title={x.out ? undefined : x.text}>{x.text}</span>)}
+    </span>
+  );
 }
 
 function Num({ v, f }: { v: number; f: (n: number) => string }) { return <b>{f(useCountUp(v))}</b>; }
@@ -66,7 +87,7 @@ export function Mission({ criteria: c, scanned, shown, flagged, threads, booked,
           {steps.map((s, i) => {
             const live = (i === current && !s.done) || (searching && i === 0);
             return (
-              <li key={s.k} className={live ? "now" : s.done ? "done" : ""}>
+              <li key={s.k} className={live ? "now" : s.done ? "done" : ""} aria-current={live ? "step" : undefined}>
                 <i>{s.done && !live ? <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="m3.5 8.5 3 3 6-7" stroke="currentColor" strokeWidth="2.2" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg> : i + 1}</i>
                 <div><strong>{s.k}</strong><small>{s.note}</small></div>
               </li>
@@ -75,8 +96,8 @@ export function Mission({ criteria: c, scanned, shown, flagged, threads, booked,
         </ol>
       </div>
       <div className="mission-live" aria-live="polite">
-        <div className="nn now"><span className="nn-dot" aria-hidden="true" /><span className="nn-k">Now</span><span key={nowText} className="nn-v" title={nowText}>{nowText}</span></div>
-        {!searching && next && <div className="nn next"><span className="nn-k">Next</span><span key={next} className="nn-v" title={next}>{next}</span></div>}
+        <div className="nn now"><span className="nn-dot" aria-hidden="true" /><span className="nn-k">Now</span><Swap className="nn-v" text={nowText} /></div>
+        {!searching && next && <div className="nn next"><span className="nn-k">Next</span><Swap className="nn-v" text={next} /></div>}
         <span className="grow" />
         {scanned > 0 && <div className="mstats">
           <span><Num v={scanned} f={int} /> scanned</span>
