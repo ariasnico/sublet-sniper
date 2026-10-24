@@ -72,7 +72,8 @@ export async function callVars(t: Thread, call: CallRecord): Promise<Vars> {
   const slots = await proposeSlots(3).catch(() => [] as Slot[]);
   return {
     landlord_name: process.env.DEMO_LANDLORD_NAME || "the landlord", listing_title: clean(t.listingTitle), listed_rent: listed || max,
-    target_rent: target, max_budget: max, renter_name: s.profile.name, renter_first_name: s.profile.name.split(" ")[0],
+    // Fixed negotiation ladder for the voice agent: open low, then meet at the listed price (never above max).
+    target_rent: target, open_rent: target, deal_rent: Math.min(max, listed || max), max_budget: max, renter_name: s.profile.name, renter_first_name: s.profile.name.split(" ")[0],
     move_in: humanDate(s.profile.moveIn), move_out: humanDate(s.profile.moveOut),
     // DEMO_VIEWING_SLOT pins the slot the agent proposes (e.g. "Monday at 6 PM") so the live demo is predictable.
     free_slots: process.env.DEMO_VIEWING_SLOT || slots.map((x) => fmtLA(x.start)).join("; ") || "weekday evenings after 5 PM",
