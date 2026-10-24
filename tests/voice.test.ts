@@ -168,3 +168,12 @@ describe("voice webhooks", () => {
     expect(((await ok.json()) as { result: string }).result).toMatch(/Free times/);
   });
 });
+
+describe("spoken times from the voice agent", () => {
+  it("turns words into digits the window parser understands", async () => {
+    const { spokenTimeToDigits } = await import("../src/lib/voice");
+    expect(spokenTimeToDigits("Monday six PM")).toBe("monday 6pm");
+    expect(spokenTimeToDigits("Monday five thirty p.m.")).toBe("monday 5:30pm");
+    expect(spokenTimeToDigits("tomorrow at noon")).toBe("tomorrow at 12pm");
+  });
+});

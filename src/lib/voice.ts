@@ -153,9 +153,19 @@ function findThread(threadId?: string, amThreadId?: string): Thread | undefined 
 const str = (x: unknown) => (typeof x === "string" && x.trim() ? x.trim() : undefined);
 
 /** Resolves the agreed time: an ISO start if given and in the future, else the spoken day/time ("Monday 5:30 PM"). */
+const NUM: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12 };
+const MIN: Record<string, string> = { "o'clock": "00", oclock: "00", fifteen: "15", thirty: "30", "forty-five": "45", "forty five": "45" };
+/** Voice agents say times in words ("six PM", "five thirty pm", "noon"): turn them into digits the parser understands. */
+export function spokenTimeToDigits(t: string): string {
+  let x = t.toLowerCase().replace(/\bnoon\b/g, "12 pm").replace(/\bhalf past (\w+)/g, "$1 thirty");
+  x = x.replace(/\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)(?:\s+(o'clock|oclock|fifteen|thirty|forty[- ]five))?\b/g,
+    (_m, h: string, m?: string) => `${NUM[h]}${m ? `:${MIN[m.replace(/-/, " ")] ?? MIN[m] ?? "00"}` : ""}`);
+  return x.replace(/\b(\d{1,2})(:\d\d)?\s*p\.?\s?m\.?/g, "$1$2pm").replace(/\b(\d{1,2})(:\d\d)?\s*a\.?\s?m\.?/g, "$1$2am");
+}
+
 export async function slotFrom(startIso?: string, spoken?: string): Promise<Slot | null> {
   // The spoken wall-clock time wins (LLMs often get UTC offsets wrong); the ISO start is the fallback.
-  const win = spoken ? parseWindow(spoken) : null;
+  const win = spoken ? parseWindow(spokenTimeToDigits(spoken)) : null;
   const fromWin = win ? await slotInWindow(win) : null;
   if (fromWin) return fromWin;
   const t = startIso ? Date.parse(startIso) : NaN;
