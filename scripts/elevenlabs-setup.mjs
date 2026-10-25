@@ -93,7 +93,9 @@ function agentBody(toolIds, withDataCollection = true) {
       asr: { keywords: ["Zelle", "Venmo", "Cash App", "PayPal", "wire", "deposit", "sublease", "sublet", "leaseholder", "Caltrain", "Mission Bay", "video tour", "Nicolás", "Sniper"] },
       // Barge-in on (a real sentence stops the agent), but fillers and background voices don't.
       conversation: { client_events: ["audio", "interruption", "agent_response", "user_transcript", "agent_response_correction", "agent_tool_response"] },
-      ...(process.env.ELEVENLABS_VOICE_ID ? { tts: { voice_id: process.env.ELEVENLABS_VOICE_ID } } : {}),
+      // Sarah: same voice as the agent in the landing's "Hear it negotiate" clip. Turbo model = lowest latency;
+      // slightly faster speech and mid stability sound natural on an 8 kHz phone line.
+      tts: { voice_id: process.env.ELEVENLABS_VOICE_ID || "EXAVITQu4vr4xnSDxMaL", model_id: "eleven_v4_turbo", stability: 0.45, similarity_boost: 0.8, speed: 1.05 },
     },
     ...(withDataCollection ? { platform_settings: { data_collection: {
       agreed_rent: { type: "number", description: "Monthly rent in USD the landlord agreed to on the call. Empty if none." },
