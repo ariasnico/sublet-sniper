@@ -98,7 +98,7 @@ export function ListingCard({ l, i, onContact, pinned, onHover, onXray }: { l: R
       </>}
       {((onContact && l.scam.light !== "red") || (onXray && l.scam.light !== "green")) && <div className="lc-actions">
         {onXray && l.scam.light !== "green" && <button className="xr-btn primary sm" onClick={() => onXray(l.id)} aria-label={`Scam X-ray: ${nSignals} signal${nSignals > 1 ? "s" : ""}`}>Scam X-ray</button>}
-        {onContact && l.scam.light !== "red" && <button className={`sm ${i === 0 && l.scam.light === "green" ? "primary" : l.scam.light === "green" ? "soft" : "ghost"}`} onClick={() => onContact(l.id)} aria-label="Let my agent reach out">Reach out</button>}
+        {onContact && l.scam.light !== "red" && <button className={`sm ${i === 0 && l.scam.light === "green" ? "primary" : l.scam.light === "green" ? "soft" : "ghost"}`} onClick={() => onContact(l.id)} aria-label="Let my agent handle this one">Handle</button>}
       </div>}
     </article>
   );

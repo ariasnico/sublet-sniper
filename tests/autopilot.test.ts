@@ -21,6 +21,16 @@ describe("autopilot end to end (mock LLM, mail, calendar)", () => {
   beforeEach(() => { resetState(); sent.length = 0; });
   afterEach(() => vi.unstubAllEnvs());
 
+  it("a listing outside the top 3 can be picked directly (Handle on any card)", async () => {
+    await chat(SEARCH);
+    const s = state();
+    const l = s.results.filter((x) => x.scam.light !== "red").at(-1)!;
+    await setAutopilot(true, l.id);
+    expect(s.autopilot.on).toBe(true);
+    expect(s.threads.map((t) => t.listingId)).toEqual([l.id]);
+    expect(sent).toEqual(["landlord-demo@example.com"]);
+  });
+
   it("picking any listing contacts it through the demo landlord only (demo stand-in)", async () => {
     await chat(SEARCH);
     const s = state();

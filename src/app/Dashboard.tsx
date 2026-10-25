@@ -465,8 +465,8 @@ export default function Dashboard({ elevenLabsAgentId, user = null }: { elevenLa
   const consent = needs.find((n) => n.kind === "autopilot_consent");
   const consentOpts = consent?.options?.length ? consent.options : CONSENT;
   // Consent = picking a listing: each chip maps to a listing id (approval payload), so any card can be the one.
-  const pickIds = (s?.approvals.find((a) => a.id === consent?.approvalId)?.payload?.ids ?? []) as string[];
-  const pickFor = (id: string) => { const k = pickIds.indexOf(id); return consent?.approvalId && k >= 0 && consentOpts[k] ? () => void approve(consent.approvalId!, true, consentOpts[k]) : undefined; };
+  // Any listing can be the one: one direct call (no LLM round trip) answers the consent and starts outreach to it.
+  const pickFor = (id: string) => () => { setMobile("home"); setPane("home"); void call("/api/autopilot", { pick: id }); };
   const followUps = useMemo(() => followUpsFor({ stage: s?.autopilot?.stage, results: s?.results ?? [], flagged: s?.flagged ?? [], threads, events: s?.events ?? [], consentPending: !!consent?.approvalId }),
     [s?.autopilot?.stage, s?.results, s?.flagged, s?.events, threads, consent?.approvalId]);
   const showList = (t: "ranked" | "flagged") => { setTab(t); setView("list"); setShowAll(true); setPane("home"); setMobile("places"); };
@@ -540,7 +540,7 @@ export default function Dashboard({ elevenLabsAgentId, user = null }: { elevenLa
     ) : (
       <div className="scroll listings">
         {searching && <div className="refreshing"><span className="spin" />Searching again…</div>}
-        {list.map((l, i) => <ListingCard key={l.id} l={l} i={tab === "ranked" ? i : undefined} onContact={tab === "ranked" ? (id) => { const p = pickFor(id); if (p) p(); else void contact(id); } : undefined} pinned={l.id === s?.analyzedId} onHover={setHovered} onXray={setXray} />)}
+        {list.map((l, i) => <ListingCard key={l.id} l={l} i={tab === "ranked" ? i : undefined} onContact={tab === "ranked" ? (id) => pickFor(id)() : undefined} pinned={l.id === s?.analyzedId} onHover={setHovered} onXray={setXray} />)}
         {!list.length && <div className="empty">{tab === "ranked" ? "No safe matches." : "No scams found."}</div>}
       </div>
     )}

@@ -247,7 +247,7 @@ export async function setAutopilot(on: boolean, pickId?: string) {
   s.autopilot = { ...s.autopilot, on, decided: true, consentAt: on ? (s.autopilot.consentAt ?? now()) : s.autopilot.consentAt };
   for (const a of s.approvals) if (a.kind === "autopilot_consent" && a.status === "pending") { a.status = "answered"; a.answer = on ? CONSENT_YES : CONSENT_NO; }
   if (on && !was) markNarrated(s); // don't replay old milestones
-  log("decision", on ? "Autopilot ON: I'll handle outreach, negotiation and booking. Craigslist replies stay yours." : "Autopilot OFF: I'll ask before every message.");
+  if (on !== was) log("decision", on ? "Autopilot ON: I'll handle outreach, negotiation and booking. Craigslist replies stay yours." : "Autopilot OFF: I'll ask before every message.");
   const outreach = on && pickId ? await contactPicked(pickId) : on && s.results.length ? await autopilotOutreach() : { emailed: [], drafts: [] };
   return { ok: true, on, ...outreach };
 }
