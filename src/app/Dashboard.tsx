@@ -19,6 +19,7 @@ import { ChatThread } from "./ui/chat/ChatThread";
 import { followUpsFor, type FollowUp } from "./ui/chat/followups";
 import type { Criteria, RankedListing } from "@/lib/types";
 import type { Approval, CallRecord, ChatMsg, Thread, TimelineItem } from "@/lib/store";
+import { predatesReset } from "@/lib/reset";
 
 const MapView = dynamic(() => import("./ui/MapView"), { ssr: false, loading: () => <div className="map map-loading" /> });
 
@@ -196,6 +197,8 @@ export default function Dashboard({ elevenLabsAgentId, user = null }: { elevenLa
   const best = useRef<S | null>(null);
   const adopt = useCallback((next: S | undefined) => {
     if (!next) return;
+    // After a Reset, a response that was already in flight still carries the old session: drop it.
+    if (predatesReset(next, resetMark())) return;
     const b = best.current;
     // A call can be known to only some instances: keep the most advanced copy of each call across responses.
     const calls = mergeCallLists(b?.calls, next.calls);

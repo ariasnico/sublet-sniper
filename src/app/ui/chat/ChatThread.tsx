@@ -129,7 +129,7 @@ export function ChatThread({ chat, greeting, typing, idle, consent, followUps, o
     </div>;
 
   return <div className="c-thread" aria-live="polite" aria-relevant="additions">
-    {chat.length === 0 && row(true, <div className="c-agent"><Rich text={greeting} /></div>, "hello")}
+    {chat.length === 0 && row(true, <div className="c-agent c-hello"><Rich text={greeting} /></div>, "hello")}
     {blocks.map((b, k) => {
       const first = blocks[k - 1]?.kind !== "agent" && blocks[k - 1]?.kind !== "status";
       if (b.kind === "user") return <div key={b.i} className="c-row c-user-row"><div className="c-user">{b.m.text}</div></div>;

@@ -1426,3 +1426,7 @@ a.hx-title:hover { text-decoration: none; color: var(--accent-strong); }
 @media (hover: hover) and (pointer: fine) { .mrow-go:hover { box-shadow: 0 0 0 1px var(--accent); color: var(--accent); } }
 .mrow-go:active { transform: scale(.97); }
 .mrow-go:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+/* Empty state: the greeting is the page's headline. */
+.grid.solo .c-hello { font-size: clamp(26px, 2.6vw, 34px); font-weight: 650; letter-spacing: -0.02em; line-height: 1.2; text-wrap: balance; color: var(--text); }
+.grid.solo .c-hello p { margin: 0; }

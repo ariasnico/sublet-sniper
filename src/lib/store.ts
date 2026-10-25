@@ -1,3 +1,4 @@
+import { predatesReset } from "./reset";
 import type { Criteria, RankedListing } from "./types";
 import { autopilotView, defaultAutopilot, sanitizeAutopilot, type AutopilotStore } from "./autopilot";
 import { currentTenant } from "./tenant-ctx";
@@ -124,6 +125,8 @@ export function hydrate(snap: unknown) {
   ensureEpoch((snap as { resetAt?: unknown }).resetAt);
   const x = snap as Partial<SessionSnapshot>;
   if (!Array.isArray(x.timeline) || !Array.isArray(x.chat) || !Array.isArray(x.results) || !Array.isArray(x.flagged) || !Array.isArray(x.approvals)) return;
+  // A copy from before the browser's last Reset (an in-flight response it adopted) must not bring the old session back.
+  if (predatesReset(x, (snap as { resetAt?: unknown }).resetAt)) return;
   const s = state();
   // Calls live on whichever instance started them: always merge the browser's copy so any instance can finish them.
   s.calls = mergeCalls(s.calls, (snap as { calls?: unknown }).calls);

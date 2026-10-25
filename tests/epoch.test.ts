@@ -15,3 +15,13 @@ describe("reset epoch across serverless instances", () => {
     expect(state().chat).toHaveLength(1);
   });
 });
+
+describe("reset vs in-flight copies", () => {
+  it("ignores a browser snapshot from before the last Reset", async () => {
+    const { resetState, hydrate, state } = await import("@/lib/store");
+    resetState();
+    const old = { ...state(), chat: [{ role: "assistant", text: "old booked session", at: "2026-10-24T20:00:00.000Z" }], timeline: [{ id: "t", at: "2026-10-24T20:00:00.000Z", kind: "info", text: "old" }] };
+    hydrate({ ...old, resetAt: "2026-10-24T21:00:00.000Z" });
+    expect(state().chat.some((c) => c.text === "old booked session")).toBe(false);
+  });
+});
