@@ -1,6 +1,6 @@
 "use client";
 /* eslint-disable @next/next/no-img-element */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import type { RankedListing } from "@/lib/types";
 import type { CallRecord, Thread } from "@/lib/store";
 import { cardThumb } from "@/lib/photo-url";
@@ -18,21 +18,26 @@ export const shortTitle = (t: string, n = 5) => {
 };
 
 /** First photo of a listing: inline when the search prefetched it, else one batched fetch. */
-function usePhoto(l?: RankedListing) {
+function usePhoto(l?: RankedListing) { return usePhotoStatus(l).src; }
+
+/** The photo and whether we know for sure there is none (nothing inline and the fetch came back empty). */
+function usePhotoStatus(l?: RankedListing): { src?: string; none: boolean } {
   const inline = l?.images?.[0] ?? (l ? peekPhotos(l.url)?.[0] : undefined);
-  const [fetched, setFetched] = useState<string | null>(null);
+  const [fetched, setFetched] = useState<string | null | undefined>(undefined);
   useEffect(() => {
     if (!l || inline || l.source !== "craigslist") return;
     let alive = true;
     void loadPhotos(l.url).then((x) => { if (alive) setFetched(x[0] ?? null); });
     return () => { alive = false; };
   }, [l, inline]);
-  return inline ?? fetched ?? undefined;
+  const src = inline ?? fetched ?? undefined;
+  return { src, none: !src && (fetched === null || (!!l && l.source !== "craigslist")) };
 }
 
-function Photo({ l, big }: { l?: RankedListing; big?: boolean }) {
+function Photo({ l, big, onFail }: { l?: RankedListing; big?: boolean; onFail?: () => void }) {
   const src = usePhoto(l);
   const [ok, setOk] = useState(true);
+  useEffect(() => { if (!ok) onFail?.(); }, [ok, onFail]);
   const [loaded, setLoaded] = useState(false);
   const ref = useRef<HTMLImageElement | null>(null);
   useEffect(() => { if (ref.current?.complete && ref.current.naturalWidth) setLoaded(true); }, [src]);
@@ -155,8 +160,13 @@ export function BookedHero({ e, title, saved, receipt, gcal, ics }: { e: { id: s
 
 /** A ranked tile under the hero: photo, title, price, safety, one action. The photo opens the listing. */
 export function MatchTile({ l, rank, onHover, onPick, onXray }: { l: RankedListing; rank: number; onHover?: (id: string | null) => void; onPick?: () => void; onXray?: () => void }) {
+  // No photo, no tile: a listing without pictures isn't worth a square on Home (it stays in the full list).
+  const { none } = usePhotoStatus(l);
+  const [broken, setBroken] = useState(false);
+  const fail = useCallback(() => setBroken(true), []);
+  if (none || broken) return null;
   return <article className={`mtile ${l.scam.light}`} onMouseEnter={() => onHover?.(l.id)} onMouseLeave={() => onHover?.(null)}>
-    <a className="mtile-ph" href={l.url} target="_blank" rel="noreferrer" aria-label={`Open ${cleanTitle(l.title)}`}><Photo l={l} big /><span className="mtile-n">#{rank}</span></a>
+    <a className="mtile-ph" href={l.url} target="_blank" rel="noreferrer" aria-label={`Open ${cleanTitle(l.title)}`}><Photo l={l} big onFail={fail} /><span className="mtile-n">#{rank}</span></a>
     <div className="mtile-b">
       <div className="mtile-t" title={cleanTitle(l.title)}>{shortTitle(l.title, 5)}</div>
       <div className="mtile-m"><b>{l.priceMonthly ? usd(l.priceMonthly) : "?"}</b><span>/mo</span>
