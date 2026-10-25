@@ -579,7 +579,7 @@ export default function Dashboard({ elevenLabsAgentId, user = null }: { elevenLa
           <div className="panel chat">
             <div className="scroll chat-scroll">
               <ChatThread chat={chat} greeting={user?.guest || !s?.profile?.name ? `Hi! ${GREETING}` : `Hi ${s.profile.name.split(" ")[0]}! ${GREETING}`} typing={typing} idle={!busy && !listening}
-                consent={consent?.approvalId ? { options: consentOpts, onPick: (o) => void approve(consent.approvalId!, true, o) } : undefined}
+                consent={consent?.approvalId && narrow ? { options: consentOpts, onPick: (o) => void approve(consent.approvalId!, true, o) } : undefined}
                 followUps={followUps} onFollowUp={pickFollowUp} onRetry={(t) => void send(t)} />
               <div ref={chatEnd} />
             </div>
