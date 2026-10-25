@@ -1,10 +1,20 @@
 # 🎯 Sublet Sniper
 
-**A voice agent that finds a safe short-term rental in San Francisco, talks to landlords for you, and refuses to get scammed.**
+**Your rental agent for San Francisco. Say what you want; it searches, blocks scams, emails and phones the landlord, negotiates, and books the viewing. You just show up.**
 
-In August 2026 a renter wired **$18,600** for a $6,200/mo Duboce Triangle 2BR that was copied from a real Zillow listing ([SF Standard](https://sfstandard.com), KQED, ABC7). Sublet Sniper reads live Craigslist + X, normalizes the mess (weekly prices, totals, Spanish dates), ranks by what you asked (budget, dates, furnished, distance to Caltrain/BART/UCSF), and puts a **traffic light with explained reasons** on every listing. Then it runs the landlord conversation from its own mailbox, negotiates inside your budget, asks for a live video tour, books the viewing on your calendar, and only pings you for decisions.
+**Live:** https://sublet-sniper.vercel.app · **App:** https://sublet-sniper.vercel.app/app (Continue as guest) · **MCP:** `https://sublet-sniper.vercel.app/api/mcp`
 
-Built for the Puentes hackathon (SF, 2026-10-24).
+**Who it's for:** anyone moving to SF for 1 to 6 months (interns, new hires, founders in a batch, visiting researchers) who has to rent sight unseen. That gap lives on Craigslist sublets, and it's exactly who scammers target: "I'm abroad, Zelle me the deposit." In August 2026 a renter wired **$18,600** for a Duboce Triangle 2BR copied from a real Zillow listing (SF Standard, KQED, ABC7).
+
+**What's different:** listing sites show you listings. Sublet Sniper *acts* for you:
+- **Scam X-ray** on every listing: deterministic, explainable score (price vs SF median, payment red flags, duplicate text, reused photos via pHash, upfront > 2x rent per CA AB 12).
+- **Calls the landlord** with an ElevenLabs voice agent (Twilio number): refuses any payment before a viewing, negotiates on a fixed ladder inside your budget, books the viewing mid-call. Live captions stream on screen while the call happens.
+- **Emails the landlord** from its own AgentMail inbox and keeps negotiating by email.
+- **One human step:** pick the listing. Then add the viewing to your calendar.
+- **Agent-native:** the same powers over MCP (`search_sublets`, `check_listing_scam`, `contact_landlord`, `get_deals`, `ask_agent`), plus `llms.txt`.
+- **Multi-tenant:** Supabase auth (magic link or guest) with row-level security.
+
+Built for the Puentes hackathon (SF, 2026-10-24). Demo script: [docs/DEMO.md](docs/DEMO.md).
 
 ## What it does
 
@@ -91,23 +101,17 @@ Custom connectors in Claude and ChatGPT don't send static bearer headers, so lea
 
 Try it locally: `npx @modelcontextprotocol/inspector --cli http://localhost:3000/api/mcp --transport http --method tools/list`.
 
-## 3-minute demo script
+## 2-minute demo
 
-1. **(0:00) Hook.** "In August someone wired $18,600 for an SF apartment that didn't exist. We built the agent that would have stopped it."
-2. **(0:20) Voice search.** Click 🎤 and say: *"Busco depto amoblado cerca de Caltrain, menos de 4 mil, del 1 de noviembre al 15 de diciembre."* The agent scans ~770 live listings, answers out loud with the top 3, and calls out the red one.
-3. **(0:50) Cards.** Show the ranked cards (price per month even when the post was weekly, km to Caltrain, why it fits). Open **🚩 Flagged**: the Duboce fixture (DEMO DATA) is red: wire, Zelle, out of the country, upfront > 2× rent, same photos as the original listing (pHash).
-4. **(1:20) Contact.** Say *"Contactá al demo de Mission Bay."* The draft lands in **Approvals**. Approve. (For a real Craigslist listing, approving opens the page and you click Reply yourself: captcha + ToS.)
-5. **(1:40) Landlord conversation.** The teammate replies to the agent's AgentMail address (or press **hello / video / slot** in mock). The agent counters within budget, asks for a video tour, offers three free slots from the calendar, and when the landlord picks one asks you to confirm. Approve, and the event is on the calendar.
-6. **(2:30) Scam attempt.** The teammate writes "I'm out of the country, Zelle the deposit today" (or press **scam**). The agent refuses, the thread turns red, and you get a single decision: drop it?
-7. **(2:50) Close.** Show the timeline: everything the agent did, and the only three times it needed you.
+See [docs/DEMO.md](docs/DEMO.md). In short: ask for a furnished 1BR under $4,000 → ~770 live listings scanned, scams blocked → open a red listing's Scam X-ray → **Handle** any listing → the agent emails, then phones the landlord (a teammate) → it refuses the Zelle deposit, counters $3,400, agrees $3,600 and books Monday 6 PM, with live captions → booked ticket with your next steps.
 
 ## Honest limitations
 
 - **Craigslist contact needs a human.** Replies go through Craigslist's relay behind an hCaptcha, and its ToS forbids robots and unsolicited messages. We never auto-contact Craigslist and never solve captchas; the human clicks Reply. Fetching is low volume (≥3 s between requests, browser UA, cache) and falls back to a snapshot, but scraping is still against Craigslist's ToS. For a real product you'd want a licensed feed or user-initiated browsing.
-- **Only demo/allowlisted addresses are emailed.** Real landlords are never contacted by the agent. No SMS or AI calls (TCPA / FCC-24-17).
+- **Only the allowlisted demo landlord is emailed or called.** Real landlords are never contacted by the agent (AI voice calls need consent under TCPA / FCC-24-17). In demo mode, whichever listing you pick is played by the demo landlord.
 - X data is a snapshot (live X DMs need a paid dev app and OAuth user token); most "sublet" posts on X are noise.
 - Scam scoring is heuristic and explainable, not a guarantee. Duplicate-photo detection only covers images we've hashed.
-- State is in memory (resets on redeploy / cold start). Google Calendar uses a refresh token from your own OAuth client (Testing mode).
+- Session state is one JSON row per user in Supabase (RLS); live captions use Twilio real-time transcription. Google Calendar uses a refresh token from your own OAuth client (Testing mode).
 - Demo data is clearly labeled `[DEMO DATA]`: the Mission Bay accomplice listing (a teammate plays the landlord) and the Duboce scam fixture modeled on the real case.
 
 ## Engineering notes
