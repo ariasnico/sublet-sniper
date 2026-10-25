@@ -43,7 +43,7 @@ function Photo({ l, big }: { l?: RankedListing; big?: boolean }) {
 }
 
 /** Results: the #1 match, with the one decision (consent) inline. */
-export function MatchHero({ l, consent, onContact, onXray }: { l: RankedListing; consent?: { options: string[]; onPick: (o: string) => void }; onContact: () => void; onXray: () => void }) {
+export function MatchHero({ l, onPick, onContact, onXray }: { l: RankedListing; onPick?: () => void; onContact: () => void; onXray: () => void }) {
   return <article className="hero hx-match" aria-label="Best match">
     <div className="hx-pwrap"><Photo l={l} big /><span className="hx-rank" aria-label="Best match">#1</span></div>
     <div className="hx-body">
@@ -51,7 +51,7 @@ export function MatchHero({ l, consent, onContact, onXray }: { l: RankedListing;
       <div className="hx-price"><b>{l.priceMonthly ? usd(l.priceMonthly) : "?"}</b><span>/mo</span>
         <button type="button" className={`hx-risk ${l.scam.light}`} onClick={onXray} aria-label={`Scam X-ray: risk ${l.scam.score} of 100`}><i aria-hidden="true" />{LABEL[l.scam.light]}</button></div>
       <div className="hx-acts">
-        {consent ? consent.options.map((o, i) => <button key={o} type="button" className={i === 0 ? "primary" : "ghost"} onClick={() => consent.onPick(o)}>{o}</button>)
+        {onPick ? <button type="button" className="primary" onClick={onPick}>Handle this one</button>
           : <button type="button" className="primary" onClick={onContact}>Reach out</button>}
       </div>
     </div>
@@ -154,10 +154,12 @@ export function BookedHero({ e, title, saved, receipt, gcal, ics }: { e: { id: s
 }
 
 /** A compact ranked row under the hero: thumb, title, price. */
-export function MatchRow({ l, rank, onHover }: { l: RankedListing; rank: number; onHover?: (id: string | null) => void }) {
-  return <a className={`mrow ${l.scam.light}`} href={l.url} target="_blank" rel="noreferrer" onMouseEnter={() => onHover?.(l.id)} onMouseLeave={() => onHover?.(null)}>
+export function MatchRow({ l, rank, onHover, onPick }: { l: RankedListing; rank: number; onHover?: (id: string | null) => void; onPick?: () => void }) {
+  const row = <a className={`mrow ${l.scam.light}`} href={l.url} target="_blank" rel="noreferrer" onMouseEnter={() => onHover?.(l.id)} onMouseLeave={() => onHover?.(null)}>
     <Photo l={l} />
     <span className="mrow-t" title={`#${rank} · ${cleanTitle(l.title)}`}>{shortTitle(l.title, 4)}</span>
     <b className="mrow-p">{l.priceMonthly ? usd(l.priceMonthly) : "?"}</b>
   </a>;
+  if (!onPick) return row;
+  return <div className="mrow-line">{row}<button type="button" className="mrow-go" onClick={onPick} aria-label={`Handle ${shortTitle(l.title, 4)}`}>Handle</button></div>;
 }

@@ -113,7 +113,7 @@ function deriveStatus(s: S | null, threads: Thread[], pending: Approval[], calli
   const p = pending.find((x) => kindOf(x) !== "open_craigslist_reply");
   if (p) {
     const k = kindOf(p);
-    return { label: "Waiting for your OK", detail: k === "send_contact" ? "to email" : k === "book_viewing" ? "to book" : undefined, tone: "wait" };
+    return { label: k === "autopilot_consent" ? "Pick one to go after" : "Waiting for your OK", detail: k === "send_contact" ? "to email" : k === "book_viewing" ? "to book" : undefined, tone: "wait" };
   }
   const t = ordered[0];
   if (t) {
@@ -461,6 +461,9 @@ export default function Dashboard({ elevenLabsAgentId, user = null }: { elevenLa
   const chat = s?.chat ?? [];
   const consent = needs.find((n) => n.kind === "autopilot_consent");
   const consentOpts = consent?.options?.length ? consent.options : CONSENT;
+  // Consent = picking a listing: each chip maps to a listing id (approval payload), so any card can be the one.
+  const pickIds = (s?.approvals.find((a) => a.id === consent?.approvalId)?.payload?.ids ?? []) as string[];
+  const pickFor = (id: string) => { const k = pickIds.indexOf(id); return consent?.approvalId && k >= 0 && consentOpts[k] ? () => void approve(consent.approvalId!, true, consentOpts[k]) : undefined; };
   const followUps = useMemo(() => followUpsFor({ stage: s?.autopilot?.stage, results: s?.results ?? [], flagged: s?.flagged ?? [], threads, events: s?.events ?? [], consentPending: !!consent?.approvalId }),
     [s?.autopilot?.stage, s?.results, s?.flagged, s?.events, threads, consent?.approvalId]);
   const showList = (t: "ranked" | "flagged") => { setTab(t); setView("list"); setShowAll(true); setPane("home"); setMobile("places"); };
@@ -502,8 +505,7 @@ export default function Dashboard({ elevenLabsAgentId, user = null }: { elevenLa
   const ev = events.find((e) => bookedThread && e.title.includes(bookedThread.listingTitle)) ?? events[0];
   const bookedDeal = bookedThread ? deal(bookedThread, listingOf(undefined, bookedThread.listingId)) : null;
   const hero = ui === "searching" ? <div className="hero hx-scan"><Scanning /></div>
-    : ui === "results" ? (top ? <MatchHero l={top} onXray={() => setXray(top.id)} onContact={() => void contact(top.id)}
-        consent={consent?.approvalId ? { options: consentOpts, onPick: (o) => void approve(consent.approvalId!, true, o) } : undefined} />
+    : ui === "results" ? (top ? <MatchHero l={top} onXray={() => setXray(top.id)} onContact={() => void contact(top.id)} onPick={pickFor(top.id)} />
       : <div className="hero hx-none"><b>No safe matches</b></div>)
     : ui === "working" && focus ? <WorkHero t={focus} l={listingOf(undefined, focus.listingId)} call={callOf(focus, calls)} onOpen={() => openDeal(focus.id)} />
     : ui === "booked" && ev ? <BookedHero e={ev} title={bookedThread?.listingTitle ?? ev.title} receipt={receipt} gcal={gcalLink(ev)} ics={icsHref(ev)}
@@ -535,14 +537,14 @@ export default function Dashboard({ elevenLabsAgentId, user = null }: { elevenLa
     ) : (
       <div className="scroll listings">
         {searching && <div className="refreshing"><span className="spin" />Searching again…</div>}
-        {list.map((l, i) => <ListingCard key={l.id} l={l} i={tab === "ranked" ? i : undefined} onContact={tab === "ranked" ? (id) => void contact(id) : undefined} pinned={l.id === s?.analyzedId} onHover={setHovered} onXray={setXray} />)}
+        {list.map((l, i) => <ListingCard key={l.id} l={l} i={tab === "ranked" ? i : undefined} onContact={tab === "ranked" ? (id) => { const p = pickFor(id); if (p) p(); else void contact(id); } : undefined} pinned={l.id === s?.analyzedId} onHover={setHovered} onXray={setXray} />)}
         {!list.length && <div className="empty">{tab === "ranked" ? "No safe matches." : "No scams found."}</div>}
       </div>
     )}
   </>;
   const more = ui === "booked" ? Math.max(0, nSafe - 1) : nSafe;
   const collapsed = <div className="more">
-    {ui === "results" && s?.results.slice(1, 3).map((l, i) => <MatchRow key={l.id} l={l} rank={i + 2} onHover={setHovered} />)}
+    {ui === "results" && s?.results.slice(1, 3).map((l, i) => <MatchRow key={l.id} l={l} rank={i + 2} onHover={setHovered} onPick={pickFor(l.id)} />)}
     {hasResults && (ui === "booked"
       ? <button type="button" className="more-link" onClick={() => showList("ranked")}>{more} more if this falls through<span aria-hidden="true">▸</span></button>
       : <div className="more-links">

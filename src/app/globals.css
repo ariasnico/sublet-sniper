@@ -1418,3 +1418,11 @@ a.hx-title:hover { text-decoration: none; color: var(--accent-strong); }
 .hx-you li.done { text-decoration: line-through; text-decoration-color: var(--green-line); }
 .hx-you li.done i { background: var(--green-soft); color: var(--green); box-shadow: none; }
 @media (prefers-reduced-motion: no-preference) { .hx-you li i { transition: background-color 200ms var(--ease-out), color 200ms var(--ease-out); } }
+
+/* Home rows while the agent waits for a pick: the row stays a link, "Handle" picks it. */
+.mrow-line { display: flex; align-items: center; gap: 8px; }
+.mrow-line .mrow { flex: 1; min-width: 0; }
+.mrow-go { flex: none; min-height: 40px; padding: 0 14px; border-radius: 12px; border: 0; background: var(--panel); box-shadow: 0 0 0 1px var(--line); color: var(--text); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; transition: transform 160ms var(--ease-out), box-shadow 160ms var(--ease-out); }
+@media (hover: hover) and (pointer: fine) { .mrow-go:hover { box-shadow: 0 0 0 1px var(--accent); color: var(--accent); } }
+.mrow-go:active { transform: scale(.97); }
+.mrow-go:focus-visible { outline: none; box-shadow: var(--focus-ring); }
