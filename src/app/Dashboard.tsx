@@ -1,6 +1,7 @@
 "use client";
 import { createElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
+import NextImage from "next/image";
 import Script from "next/script";
 import Link from "next/link";
 import { Toaster, toast } from "sonner";
@@ -547,11 +548,11 @@ export default function Dashboard({ elevenLabsAgentId, user = null }: { elevenLa
   </>;
   const more = ui === "booked" ? Math.max(0, nSafe - 1) : nSafe;
   const collapsed = <div className="more">
-    {ui === "results" && s?.results.slice(1, 3).map((l, i) => <MatchRow key={l.id} l={l} rank={i + 2} onHover={setHovered} onPick={pickFor(l.id)} />)}
+    {ui === "results" && s?.results.slice(1).map((l, i) => <MatchRow key={l.id} l={l} rank={i + 2} onHover={setHovered} onPick={pickFor(l.id)} />)}
     {hasResults && (ui === "booked"
       ? <button type="button" className="more-link" onClick={() => showList("ranked")}>{more} more if this falls through<span aria-hidden="true">▸</span></button>
       : <div className="more-links">
-        <button type="button" className="more-link" onClick={() => showList("ranked")}>See all {nSafe}</button>
+        <button type="button" className="more-link" onClick={() => { showList("ranked"); setView("map"); }}>See on map</button>
         {nScam > 0 && <><span aria-hidden="true">·</span><button type="button" className="more-link red" onClick={() => showList("flagged")}>{nScam} scam{nScam === 1 ? "" : "s"} blocked</button></>}
       </div>)}
   </div>;
@@ -579,6 +580,11 @@ export default function Dashboard({ elevenLabsAgentId, user = null }: { elevenLa
       <main className={`grid${ui === "empty" ? " solo" : ""}`} data-m={mobile} data-ui={ui} data-loading={s ? undefined : ""}>
         <section className="col col-chat">
           {narrow && ui !== "empty" && <div className="m-hero">{needCards}{heroShown}</div>}
+          {ui === "empty" && <figure className="sf-hero">
+            {/* Golden Gate at sunset (Unsplash, free license): says "San Francisco" before any word does. */}
+            <NextImage src="/app-sf.jpg" alt="" fill priority sizes="(max-width: 1000px) 100vw, 760px" />
+            <figcaption><h2>Find your San Francisco sublet.</h2><p>I search, block scams, call landlords and book the viewing.</p></figcaption>
+          </figure>}
           <div className="panel chat">
             <div className="scroll chat-scroll">
               <ChatThread chat={chat} greeting={user?.guest || !s?.profile?.name ? `Hi! ${GREETING}` : `Hi ${s.profile.name.split(" ")[0]}! ${GREETING}`} typing={typing} idle={!busy && !listening}
