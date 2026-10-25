@@ -23,7 +23,7 @@ import type { Approval, CallRecord, ChatMsg, Thread, TimelineItem } from "@/lib/
 const MapView = dynamic(() => import("./ui/MapView"), { ssr: false, loading: () => <div className="map map-loading" /> });
 
 interface Modes { llm: string; mail: string; calendar: string; craigslist: string; voice: string; calls?: boolean; browserVoice?: boolean; agentInbox: string }
-interface S { version?: string; analyzedId?: string | null; criteria?: Criteria | null; results: RankedListing[]; flagged: RankedListing[]; timeline: TimelineItem[]; approvals: Approval[]; threads: Thread[]; chat: ChatMsg[];
+interface S { profile?: { name: string }; version?: string; analyzedId?: string | null; criteria?: Criteria | null; results: RankedListing[]; flagged: RankedListing[]; timeline: TimelineItem[]; approvals: Approval[]; threads: Thread[]; chat: ChatMsg[];
   events: { id: string; title: string; start: string; end?: string; link?: string }[]; modes: Modes; searchReport: { mode: string; total: number } | null; autopilot?: Partial<AutopilotView>; calls?: CallRecord[] }
 
 /** One "needs you" card: from s.autopilot.needsYou when the backend reports it, else built from pending approvals. */
@@ -53,7 +53,7 @@ const LA = "America/Los_Angeles";
 const fmtLong = (iso: string) => new Date(iso).toLocaleString("en-US", { timeZone: LA, weekday: "long", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) + " PT";
 const clean = (t: string) => t.replace(/^Viewing: /, "").replace(/^\[DEMO DATA\]\s*/, "");
 const short = (t: string, n = 38) => { const c = clean(t); return c.length > n ? `${c.slice(0, n - 1).trimEnd()}…` : c; };
-const GREETING = "Hi Nicolás! Tell me what you need and I'll handle the rest.";
+const GREETING = "Tell me what you need and I'll handle the rest.";
 const SCAN_STEPS = ["Scanning Craigslist", "Normalizing prices", "Comparing to SF medians", "Checking reused photos", "Checking payment red flags", "Ranking"];
 const CONSENT = ["Yes, go", "I'll approve each step"];
 const AP_TIP = "Emails, negotiates and books for you.";
@@ -576,7 +576,7 @@ export default function Dashboard({ elevenLabsAgentId, user = null }: { elevenLa
           {narrow && ui !== "empty" && <div className="m-hero">{needCards}{heroShown}</div>}
           <div className="panel chat">
             <div className="scroll chat-scroll">
-              <ChatThread chat={chat} greeting={GREETING} typing={typing} idle={!busy && !listening}
+              <ChatThread chat={chat} greeting={user?.guest || !s?.profile?.name ? `Hi! ${GREETING}` : `Hi ${s.profile.name.split(" ")[0]}! ${GREETING}`} typing={typing} idle={!busy && !listening}
                 consent={consent?.approvalId ? { options: consentOpts, onPick: (o) => void approve(consent.approvalId!, true, o) } : undefined}
                 followUps={followUps} onFollowUp={pickFollowUp} onRetry={(t) => void send(t)} />
               <div ref={chatEnd} />

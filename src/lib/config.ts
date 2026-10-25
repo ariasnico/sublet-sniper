@@ -27,3 +27,6 @@ export function modes() {
     agentInbox: process.env.AGENTMAIL_INBOX_ID || "agent@mock.local",
   };
 }
+
+/** Demo mode: whichever listing the user picks, the demo landlord (DEMO_LANDLORD_EMAIL/PHONE) plays its landlord. */
+export const standIn = () => !!process.env.DEMO_LANDLORD_EMAIL && process.env.DEMO_STANDIN !== "0";

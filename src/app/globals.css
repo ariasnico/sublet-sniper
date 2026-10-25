@@ -1406,3 +1406,15 @@ a.hx-title:hover { text-decoration: none; color: var(--accent-strong); }
 /* Until the first state arrives, keep the columns invisible (no flash of the empty state on reload). */
 .grid > .col { transition: opacity 200ms var(--ease-out); }
 .grid[data-loading] > .col { opacity: 0; }
+
+/* Booked: the human's remaining steps; the current one is emphasized. */
+.hx-you { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--green-line); }
+.hx-you-h { font-size: 12px; font-weight: 600; color: var(--green); margin-bottom: 6px; }
+.hx-you ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.hx-you li { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--faint); }
+.hx-you li i { flex: none; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-size: 11px; font-weight: 700; box-shadow: inset 0 0 0 1px var(--line); color: var(--faint); }
+.hx-you li.now { color: var(--text); font-weight: 600; }
+.hx-you li.now i { background: var(--green); color: #fff; box-shadow: none; }
+.hx-you li.done { text-decoration: line-through; text-decoration-color: var(--green-line); }
+.hx-you li.done i { background: var(--green-soft); color: var(--green); box-shadow: none; }
+@media (prefers-reduced-motion: no-preference) { .hx-you li i { transition: background-color 200ms var(--ease-out), color 200ms var(--ease-out); } }

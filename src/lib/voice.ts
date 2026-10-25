@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { mailLive, voiceLive } from "./config";
+import { mailLive, voiceLive, standIn } from "./config";
 import { bookViewing, proposeSlots, slotInWindow, type Slot } from "./calendar";
 import { demoListings } from "./demo";
 import { detectRedFlags, emailAllowed, parseWindow, phoneAllowed, rentIn } from "./landlord";
@@ -42,7 +42,8 @@ async function el(path: string, init: RequestInit = {}): Promise<Record<string, 
 /** The number to dial for a thread, or why not. Only the seeded demo listing, only allowlisted phones. */
 export function callTarget(t: Thread, browser = false): { to: string } | { error: string } {
   const l = findListing(t.listingId) ?? demoListings().find((x) => x.id === t.listingId);
-  if (!l || l.source !== "demo" || l.demo?.kind !== "accomplice") return { error: "Only the demo listing can be called" };
+  // Demo listing, or (demo stand-in) any listing the user picked, as long as the thread is with the allowlisted demo landlord.
+  if (!l || (l.source === "demo" ? l.demo?.kind !== "accomplice" : !standIn())) return { error: "Only the demo listing can be called" };
   if (!emailAllowed(t.landlordEmail)) return { error: "Landlord is not the allowlisted demo landlord" };
   if (browser) return { to: "browser" };
   const to = process.env.DEMO_LANDLORD_PHONE ?? "";
@@ -66,7 +67,9 @@ export async function callVars(t: Thread, call: CallRecord): Promise<Vars> {
   const s = state();
   const l = findListing(t.listingId);
   const raw = demoListings().find((x) => x.id === t.listingId);
-  const listed = l?.priceMonthly ?? (raw?.priceText ? rentIn(raw.priceText) : null) ?? 0;
+  // Stand-in calls keep the demo listing's numbers, so the rehearsed negotiation works whichever listing was picked.
+  const demoRaw = demoListings().find((x) => x.demo?.kind === "accomplice");
+  const listed = (l && l.source !== "demo" && demoRaw ? rentIn(demoRaw.priceText ?? "") : null) ?? l?.priceMonthly ?? (raw?.priceText ? rentIn(raw.priceText) : null) ?? 0;
   const max = s.profile.maxBudget;
   const target = Math.min(max, listed ? Math.round((listed * 0.95) / 50) * 50 : Math.round((max * 0.875) / 50) * 50);
   const slots = await proposeSlots(3).catch(() => [] as Slot[]);
@@ -127,6 +130,7 @@ export async function startCall(t: Thread, mode: "phone" | "browser" = "phone"):
         conversation_initiation_client_data: { dynamic_variables: vars }, telephony_call_config: { ringing_timeout_secs: 30 } }) });
       if (r.success === false) throw new Error(String(r.message ?? "call not started"));
       call.conversationId = typeof r.conversation_id === "string" ? r.conversation_id : undefined;
+      call.callSid = typeof r.callSid === "string" ? r.callSid : typeof r.call_sid === "string" ? r.call_sid : undefined;
       indexCall(call.conversationId);
     } catch (e) {
       failCall(call, e instanceof Error ? e.message : "call failed");
@@ -472,8 +476,14 @@ export async function pollCalls(): Promise<number> {
       const c = (await el(`/v1/convai/conversations/${encodeURIComponent(call.conversationId)}`)) as ElConversation;
       if (c.status === "done") { await finishCall(call, c, { recap: !process.env.ELEVENLABS_WEBHOOK_SECRET }); changed++; }
       else if (c.status === "failed") { failCall(call, "the call did not connect", "no_answer"); changed++; }
-      // In flight ("initiated" / "in-progress" / "processing"): the transcript so far feeds the call stage.
-      else if (c.transcript?.length) refreshLive(call, c.transcript);
+      // In flight: ElevenLabs keeps the transcript until the end, so the stage shows Twilio's live captions.
+      else {
+        const cap = call.callSid ? await import("./captions") : null;
+        if (cap && call.callSid && !call.captions) { call.captions = await cap.startCaptions(call.callSid).catch(() => false); if (call.captions) changed++; }
+        const turns = cap && call.callSid ? await cap.readCaptions(call.callSid, call.startedAt).catch(() => []) : [];
+        const best = turns.length > (c.transcript?.length ?? 0) ? turns : c.transcript;
+        if (best?.length) { const n = call.transcript.length; refreshLive(call, best); if (call.transcript.length !== n) changed++; }
+      }
     } catch { /* keep polling */ }
   }
   return changed;

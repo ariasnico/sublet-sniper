@@ -12,7 +12,7 @@ describe("demo flow (mock LLM, mock mail, mock calendar, snapshot data)", () => 
     expect(s.results.slice(0, 3).map((r) => r.id)).toContain("demo-mission-bay");
     expect(s.flagged[0].id).toBe("demo-duboce-scam");
     expect(s.flagged[0].scam.light).toBe("red");
-    expect(r1).toMatch(/#1/);
+    expect(r1).toMatch(/Pick one/);
     expect(s.results.filter((r) => r.source === "craigslist").length).toBeGreaterThan(2);
 
     await chat("Contactá al demo de Mission Bay");

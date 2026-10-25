@@ -39,5 +39,5 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   // Webhooks, MCP and photo proxies carry no user session; static files never need one.
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|icon.svg|api/mcp|api/mail/webhook|api/voice/tool|api/voice/webhook|api/photo|auth/callback|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|xml)$).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|icon.svg|api/mcp|api/mail/webhook|api/voice/tool|api/voice/webhook|api/voice/captions|api/photo|auth/callback|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|xml)$).*)"],
 };

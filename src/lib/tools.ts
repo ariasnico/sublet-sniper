@@ -4,7 +4,7 @@ import { fetchListingPage, snapshotListings } from "./sources/craigslist";
 import { normalizeHeuristic } from "./normalize";
 import { rankListings } from "./rank";
 import { llmNormalize } from "./llm-normalize";
-import { autopilotChannel, llmProvider } from "./config";
+import { autopilotChannel, llmProvider, standIn } from "./config";
 import { callTarget, startCall } from "./voice";
 import { proposeSlots, bookViewing, slotInWindow, type Slot } from "./calendar";
 import { sendMail } from "./mail";
@@ -148,10 +148,17 @@ export function toolDraftContact(input: Record<string, unknown>, auto = false) {
 }
 
 /** Can autopilot email this listing's landlord directly? Only allowlisted demo landlords, never Craigslist/X, never red. */
-export function autoEmailable(l: RankedListing): string | null {
-  const email = l.demo?.landlordEmail;
-  if (l.source !== "demo" || !email || l.scam.light === "red") return null;
-  return emailAllowed(email) ? email : null;
+export function autoEmailable(l: RankedListing, picked = false): string | null {
+  if (l.scam.light === "red") return null;
+  // Demo stand-in: the listing the user picked is handled through the allowlisted demo landlord (never the real poster).
+  const email = l.source === "demo" ? l.demo?.landlordEmail : picked && standIn() ? process.env.DEMO_LANDLORD_EMAIL : undefined;
+  return email && emailAllowed(email) ? email : null;
+}
+
+/** Consent chip for a listing: "$3,600 Furnished 1BR sublet near Caltrain". */
+export function pickLabel(l: RankedListing): string {
+  const t = l.title.replace(/^\[DEMO DATA\]\s*/, "").replace(/,.*$/, "").trim();
+  return `${l.priceMonthly ? `$${l.priceMonthly.toLocaleString("en-US")} ` : ""}${t.length > 34 ? `${t.slice(0, 33).trimEnd()}…` : t}`;
 }
 
 /** Sends a first contact email and opens the thread. The allowlist gates every send; autopilot can never hit Craigslist/X. */
@@ -159,7 +166,7 @@ export async function sendContact(listingId: string | undefined, to: string, sub
   const s = state();
   if (!emailAllowed(to)) { log("flag", `Blocked email to ${to}: not on the demo allowlist`); return { error: "recipient not allowlisted" as const }; }
   const l = listingId ? findListing(listingId) : undefined;
-  if (auto && (!l || !autoEmailable(l))) { log("flag", `Autopilot will not email "${l?.title ?? listingId}": only allowlisted demo landlords`); return { error: "not auto-contactable" as const }; }
+  if (auto && (!l || !autoEmailable(l, true))) { log("flag", `Autopilot will not email "${l?.title ?? listingId}": only allowlisted demo landlords`); return { error: "not auto-contactable" as const }; }
   // Shared AgentMail inbox: the subject carries the tenant tag and the thread is indexed for the mail webhook.
   subject = tagSubject(subject);
   const sent = await sendMail(to, subject, body);
@@ -223,23 +230,41 @@ export async function autopilotOutreach(max = 3) {
 export function requestAutopilotConsent() {
   const s = state();
   if (s.autopilot.decided || s.approvals.some((a) => a.kind === "autopilot_consent")) return null;
-  const a: Approval = { id: uid("ap"), at: now(), kind: "autopilot_consent", title: "Let me handle it end to end?", options: [CONSENT_YES, CONSENT_NO], status: "pending",
+  // The user picks which listing to go after (one tap = consent); the chips are the top safe matches.
+  const picks = safeMatches(3);
+  const a: Approval = { id: uid("ap"), at: now(), kind: "autopilot_consent", title: "Which one should I go after?", options: picks.length ? picks.map(pickLabel) : [CONSENT_YES, CONSENT_NO], status: "pending",
+    payload: { ids: picks.map((l) => l.id) },
     body: "I'll email the landlords I'm allowed to, negotiate within your budget, ask for proof, refuse any payment before a viewing and book the first free slot. Craigslist replies stay yours: I prepare them, you click Reply." };
   s.approvals.unshift(a);
-  log("decision", "Asked once: handle everything end to end?");
+  log("decision", "Asked once: which listing to go after?");
   return a.id;
 }
 
 /** Off switch / consent. Turning it on starts outreach on the current results immediately. */
-export async function setAutopilot(on: boolean) {
+export async function setAutopilot(on: boolean, pickId?: string) {
   const s = state();
   const was = s.autopilot.on;
   s.autopilot = { ...s.autopilot, on, decided: true, consentAt: on ? (s.autopilot.consentAt ?? now()) : s.autopilot.consentAt };
   for (const a of s.approvals) if (a.kind === "autopilot_consent" && a.status === "pending") { a.status = "answered"; a.answer = on ? CONSENT_YES : CONSENT_NO; }
   if (on && !was) markNarrated(s); // don't replay old milestones
   log("decision", on ? "Autopilot ON: I'll handle outreach, negotiation and booking. Craigslist replies stay yours." : "Autopilot OFF: I'll ask before every message.");
-  const outreach = on && s.results.length ? await autopilotOutreach() : { emailed: [], drafts: [] };
+  const outreach = on && pickId ? await contactPicked(pickId) : on && s.results.length ? await autopilotOutreach() : { emailed: [], drafts: [] };
   return { ok: true, on, ...outreach };
+}
+
+/** The listing the user picked: emailed (and called) through the demo landlord when allowed, else a reply draft for the human. */
+async function contactPicked(id: string) {
+  const s = state();
+  const l = findListing(id);
+  const emailed: string[] = [], drafts: string[] = [];
+  if (!l || s.threads.some((t) => t.listingId === l.id)) return { emailed, drafts };
+  const email = autoEmailable(l, true);
+  if (email) {
+    const { subject, text } = firstContact(s.profile, l.title, l.priceMonthly);
+    if ("ok" in (await sendContact(l.id, email, subject, text, true))) emailed.push(l.id);
+  } else if ("approvalId" in toolDraftContact({ id: l.id }, true)) drafts.push(l.id);
+  narrate(s);
+  return { emailed, drafts };
 }
 
 /** Marks every pending Craigslist draft as handed to the human and returns what to open/paste (the one human step). */
@@ -324,8 +349,10 @@ export async function resolveApproval(id: string, approve: boolean, answer?: str
   if (!a || a.status !== "pending") return { error: "not pending" };
   if (a.kind === "decision") { a.status = "answered"; a.answer = answer ?? (approve ? "Yes" : "No"); log("decision", `You answered "${a.title}": ${a.answer}`); return { ok: true }; }
   if (a.kind === "autopilot_consent") {
-    const yes = approve && !(answer && /approve each|cada paso|^no\b/i.test(answer));
-    const r = await setAutopilot(yes);
+    const yes = approve && !(answer && /approve each|cada paso|^no\b|not now/i.test(answer));
+    const ids = Array.isArray(a.payload?.ids) ? (a.payload.ids as string[]) : [];
+    const k = answer ? (a.options ?? []).indexOf(answer) : 0;
+    const r = await setAutopilot(yes, yes ? ids[Math.max(0, k)] : undefined);
     a.status = "answered"; a.answer = yes ? CONSENT_YES : CONSENT_NO;
     return r;
   }

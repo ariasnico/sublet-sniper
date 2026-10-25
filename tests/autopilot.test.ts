@@ -21,22 +21,36 @@ describe("autopilot end to end (mock LLM, mail, calendar)", () => {
   beforeEach(() => { resetState(); sent.length = 0; });
   afterEach(() => vi.unstubAllEnvs());
 
+  it("picking any listing contacts it through the demo landlord only (demo stand-in)", async () => {
+    await chat(SEARCH);
+    const s = state();
+    const consent = s.approvals.find((a) => a.kind === "autopilot_consent")!;
+    const k = consent.options!.length - 1;
+    const id = (consent.payload!.ids as string[])[k];
+    expect(id).not.toBe("demo-mission-bay");
+    await resolveApproval(consent.id, true, consent.options![k]);
+    expect(s.threads).toHaveLength(1);
+    expect(s.threads[0].listingId).toBe(id);
+    expect(sent).toEqual(["landlord-demo@example.com"]);
+  });
+
   it("search -> one consent -> auto outreach -> counter -> deal -> booked, narrated in short English", async () => {
     const reply = await chat(SEARCH);
     const s = state();
     // Short English reply (even to a Spanish request): counts + one next step, never the listings as prose.
     expect(reply.split("\n").length).toBeLessThanOrEqual(2);
-    expect(reply).toMatch(/^Found \d+ safe places, blocked \d+ scams?\.\nHandle it end to end, starting with #1\?$/);
+    expect(reply).toMatch(/^Found \d+ safe places, blocked \d+ scams?\.\nPick one and I'll handle the rest\.$/);
     expect(reply).not.toMatch(/DEMO DATA|Caltrain/);
     // Undecided: exactly one consent approval, nothing sent yet.
     const consent = s.approvals.filter((a) => a.kind === "autopilot_consent");
     expect(consent).toHaveLength(1);
-    expect(consent[0].options).toEqual(["Yes, go", "I'll approve each step"]);
+    expect(consent[0].options?.[0]).toBe("$3,600 Furnished 1BR sublet near Caltrain");
+    expect(consent[0].options?.length).toBeLessThanOrEqual(3);
     expect(autopilotView(s)).toMatchObject({ on: false, decided: false, stage: "consent" });
     expect(sent).toHaveLength(0);
 
-    // "Yes, go": autopilot on and outreach starts immediately.
-    await resolveApproval(consent[0].id, true, "Yes, go");
+    // Picking a listing: autopilot on and outreach to that one starts immediately.
+    await resolveApproval(consent[0].id, true, consent[0].options![0]);
     expect(s.autopilot.on).toBe(true);
     expect(s.threads).toHaveLength(1);
     const t = s.threads[0];
@@ -44,17 +58,12 @@ describe("autopilot end to end (mock LLM, mail, calendar)", () => {
     expect(t.auto).toBe(true);
     expect(sent).toEqual(["landlord-demo@example.com"]);
     expect(s.approvals.some((a) => a.kind === "send_contact")).toBe(false); // no per-message approval
-    // Craigslist matches become ONE human step, never an email.
+    // Only the picked listing is contacted: no Craigslist drafts for the others.
     const view = publicState().autopilot;
-    const cl = view.needsYou.filter((n) => n.kind === "craigslist_replies");
-    expect(cl).toHaveLength(1);
-    const drafts = s.approvals.filter((a) => a.kind === "open_craigslist_reply" && a.status === "pending");
-    expect(drafts.length).toBeGreaterThan(0);
-    expect(cl[0].kind === "craigslist_replies" && cl[0].items.every((i) => /craigslist\.org/.test(i.url) && i.message.length > 50)).toBe(true);
+    expect(view.needsYou.filter((n) => n.kind === "craigslist_replies")).toHaveLength(0);
     expect(view.stage).toBe("waiting");
     expect(view.now).toBe("Waiting on the landlord.");
     expect(autoText()).toMatch(/^✉️ Emailed the landlord\.$/m);
-    expect(autoText()).toMatch(/Craigslist/);
 
     // Landlord quotes a price: agent counters within budget and keeps asking for proof.
     await handleInbound({ from: t.landlordEmail, text: "Hi Nicolás! Yes, it's still available. It's $3,800/mo, fully furnished. Tell me a bit about yourself?", messageId: "ap1" });

@@ -11,7 +11,7 @@ ${state().autopilot.on
     ? "AUTOPILOT IS ON (the user consented once): after search_listings the system itself emails the allowlisted demo landlord and prepares Craigslist reply drafts for the top safe matches, then negotiates, asks for proof and books. Don't ask permission to contact; don't call draft_contact for those."
     : "Autopilot is OFF: contacting goes through the approvals queue (draft_contact). If the user says to handle everything, call set_autopilot {on:true}."}
 Only use ask_owner_decision for real decisions. ALWAYS reply in English, even when the user writes or speaks Spanish (you understand Spanish; you answer in English). Reply briefly (it may be spoken aloud): one or two short sentences.
-After a search, the cards already show the listings: NEVER list them in prose. Reply in at most 2 short lines: how many safe places, how many scams blocked, and one next step${state().autopilot.on ? " (say you are already emailing the landlord of the best match)" : " (e.g. ask whether to handle it end to end)"}.
+After a search, the cards already show the listings: NEVER list them in prose. Reply in at most 2 short lines: how many safe places, how many scams blocked, and one next step${state().autopilot.on ? " (say you are already emailing the landlord of the best match)" : " (ask which one to go after: \"Pick one and I'll handle the rest.\")"}.
 Refer to listings as #1, #2... in the order of the latest search results.`;
 
 function idx(text: string): number | null {
@@ -26,7 +26,7 @@ function searchSummary(): string {
   const s = state();
   const n = s.results.length, f = s.flagged.length;
   const first = `Found ${n} safe ${n === 1 ? "place" : "places"}, blocked ${f} ${f === 1 ? "scam" : "scams"}.`;
-  if (!s.autopilot.on) return `${first}\n${s.autopilot.decided ? "Start with #1?" : "Handle it end to end, starting with #1?"}`;
+  if (!s.autopilot.on) return `${first}\n${s.autopilot.decided ? "Start with #1?" : "Pick one and I'll handle the rest."}`;
   const target = safeMatches().find((l) => autoEmailable(l));
   const k = target ? s.results.indexOf(target) + 1 : 0;
   return `${first}\n${k ? `Emailing the landlord of #${k} now.` : "Drafting your Craigslist replies."}`;

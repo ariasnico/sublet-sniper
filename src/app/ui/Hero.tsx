@@ -115,6 +115,18 @@ export function BookedHero({ e, title, saved, receipt, gcal, ics }: { e: { id: s
     document.addEventListener("pointerdown", off); document.addEventListener("keydown", esc);
     return () => { document.removeEventListener("pointerdown", off); document.removeEventListener("keydown", esc); };
   }, [menu]);
+  // The human's part, in order: the first undone step is "your next step". Calendar is checked once clicked (per viewing).
+  const key = `cal-added:${e.id}`;
+  const [added, setAdded] = useState(false);
+  useEffect(() => { try { setAdded(localStorage.getItem(key) === "1"); } catch { /* storage blocked */ } }, [key]);
+  const markAdded = () => { setAdded(true); setMenu(false); try { localStorage.setItem(key, "1"); } catch { /* storage blocked */ } };
+  const time = new Date(e.start).toLocaleString("en-US", { timeZone: LA, weekday: "short", hour: "numeric", minute: "2-digit" });
+  const steps = [
+    { t: "Add it to your calendar", done: added },
+    { t: `Join the video tour, ${time}`, done: false },
+    { t: "Sign the sublease, then pay", done: false },
+  ];
+  const cur = steps.findIndex((x) => !x.done);
   const d = new Date(e.start);
   return <article className="hero hx-booked ticket-card" aria-label="Viewing booked">
     <div className="cal" aria-hidden="true"><span>{d.toLocaleString("en-US", { timeZone: LA, month: "short" })}</span><b>{d.toLocaleString("en-US", { timeZone: LA, day: "numeric" })}</b></div>
@@ -124,15 +136,19 @@ export function BookedHero({ e, title, saved, receipt, gcal, ics }: { e: { id: s
       {saved ? <div className="hx-saved">Saved <b>{usd(saved)}/mo</b></div> : null}
       <div className="hx-receipt">{receipt}</div>
       <div className="tk-actions" ref={wrap}>
-        <a className="tk-primary" href={e.link ?? gcal} target="_blank" rel="noreferrer">Add to calendar</a>
+        <a className="tk-primary" href={e.link ?? gcal} target="_blank" rel="noreferrer" onClick={markAdded}>Add to calendar</a>
         <button type="button" className="hx-cal-more" aria-label="More calendar options" aria-expanded={menu} onClick={() => setMenu((x) => !x)}>
           <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="m7 10 5 5 5-5" stroke="currentColor" strokeWidth="2.2" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
         {menu && <div className="hx-menu" role="menu">
-          <a role="menuitem" href={ics} download="viewing.ics" onClick={() => setMenu(false)}>Apple / Outlook (.ics)</a>
-          <a role="menuitem" href={gcal} target="_blank" rel="noreferrer" onClick={() => setMenu(false)}>Google Calendar</a>
+          <a role="menuitem" href={ics} download="viewing.ics" onClick={markAdded}>Apple / Outlook (.ics)</a>
+          <a role="menuitem" href={gcal} target="_blank" rel="noreferrer" onClick={markAdded}>Google Calendar</a>
         </div>}
       </div>
-      <div className="tn">Pay nothing before you see it.</div>
+      <div className="hx-you" aria-label="What you do next">
+        <div className="hx-you-h">Your next step</div>
+        <ol>{steps.map((x, i) => <li key={x.t} className={x.done ? "done" : i === cur ? "now" : undefined} aria-current={i === cur ? "step" : undefined}>
+          <i aria-hidden="true">{x.done ? "✓" : i + 1}</i>{x.t}</li>)}</ol>
+      </div>
     </div>
   </article>;
 }

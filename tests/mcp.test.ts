@@ -101,7 +101,7 @@ describe("MCP server", () => {
 
   it("get_deals and ask_agent reuse the web app state and agent", async () => {
     const a = await call("ask_agent", { message: "Busco 1BR amoblado en SF, menos de $4000" });
-    expect((a.structuredContent as { reply: string }).reply).toMatch(/#1/);
+    expect((a.structuredContent as { reply: string }).reply).toMatch(/Pick one/);
     await call("contact_landlord", { listingId: "demo-mission-bay" });
     const d = (await call("get_deals")).structuredContent as { threads: { status: string; safetyChecks: unknown[] }[] };
     expect(d.threads).toHaveLength(1);

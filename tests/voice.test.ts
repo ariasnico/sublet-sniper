@@ -67,7 +67,12 @@ describe("voice calls (mock)", () => {
 
   it("never calls a Craigslist landlord or a non-allowlisted number", async () => {
     const t = await demoThread();
-    expect(callTarget({ ...t, listingId: state().results.find((r) => r.source === "craigslist")?.id ?? "cl-x" })).toMatchObject({ error: expect.any(String) });
+    const cl = state().results.find((r) => r.source === "craigslist")?.id ?? "cl-x";
+    // Demo stand-in: a picked Craigslist listing is played by the allowlisted demo landlord, never its real poster.
+    expect(callTarget({ ...t, listingId: cl })).toMatchObject({ to: "+15555550123" });
+    expect(callTarget({ ...t, listingId: cl, landlordEmail: "real-poster@example.com" })).toMatchObject({ error: expect.any(String) });
+    vi.stubEnv("DEMO_STANDIN", "0");
+    expect(callTarget({ ...t, listingId: cl })).toMatchObject({ error: expect.any(String) });
     vi.stubEnv("DEMO_LANDLORD_PHONE", "");
     expect(await startCall(t)).toMatchObject({ error: expect.stringMatching(/DEMO_LANDLORD_PHONE/) });
     expect(state().calls).toHaveLength(0);

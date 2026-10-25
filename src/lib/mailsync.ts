@@ -98,7 +98,7 @@ async function doSync(c: SyncCache): Promise<PendingInbound[]> {
     const landlordEmail = fromAddress(String(firstOut?.to?.[0] ?? msgs.find((m) => fromAddress(String(m.from ?? "")) !== own)?.from ?? ""));
     const subject = String(full.subject ?? it.subject ?? "");
     const bare = subject.replace(TENANT_TAG, "").replace(SUBJECT_TAG, "").replace(/^re:\s*/i, "").trim();
-    const listing = demoListings().find((l) => l.title.includes(bare));
+    const listing = demoListings().find((l) => l.title.includes(bare)) ?? s.results.find((l) => l.title.includes(bare));
     const tmsgs: ThreadMsg[] = msgs.map((m) => {
       const mine = fromAddress(String(m.from ?? "")) === own;
       const text = String((mine ? m.text : m.extracted_text ?? m.text) ?? "").trim();

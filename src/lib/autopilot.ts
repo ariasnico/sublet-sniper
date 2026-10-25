@@ -193,7 +193,7 @@ export function autopilotView(s: State): AutopilotView {
 
   // Now/Next stay at 8 words or fewer: the mission strip shows counts, the deal card shows the listing.
   if (!s.criteria && !s.results.length) return v(ap.on ? "idle" : ap.decided ? "paused" : "idle", "Waiting for your request.", "Tell me area, budget and dates.");
-  if (ny.some((x) => x.kind === "autopilot_consent")) return v("consent", "Waiting for your OK.", "Email, negotiate and book for you.");
+  if (ny.some((x) => x.kind === "autopilot_consent")) return v("consent", "Pick one to go after.", "Email, negotiate and book for you.");
   if (!ap.on) return v("paused", "Autopilot off. I ask first.", "Turn it on to go hands-free.");
   const booked = threads.find((t) => t.status === "booked") ?? (s.events.length ? threads[0] : undefined);
   if (booked || s.events.length) {

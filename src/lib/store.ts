@@ -15,6 +15,8 @@ export interface CallRecord {
   id: string; threadId: string; amThreadId?: string; listingId: string; listingTitle: string; to: string;
   mode: "elevenlabs" | "browser" | "mock"; status: "calling" | "done" | "failed" | "no_answer";
   conversationId?: string; startedAt: string; endedAt?: string;
+  /** Twilio call (phone calls): live captions are started on it once it is answered. */
+  callSid?: string; captions?: boolean;
   /** Live (mock) or final transcript. */
   transcript: ThreadMsg[]; summary?: string;
   /** Set by the book_viewing tool during the call. */
@@ -42,6 +44,9 @@ export interface State {
   autopilot: AutopilotStore;
   calls: CallRecord[];
 }
+
+/** Renter name for guest sessions (no account, so no real name). */
+export const GUEST_NAME = "Alex Rivera";
 
 export function defaultProfile(): RenterProfile {
   return {
