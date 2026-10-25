@@ -109,6 +109,17 @@ export async function startCall(t: Thread, mode: "phone" | "browser" = "phone"):
   log("call", `📞 Calling the landlord about "${clean(t.listingTitle)}"${call.mode === "mock" ? " (simulated)" : call.mode === "browser" ? " (browser)" : ""}`);
   say(s, `call:start:${call.id}`, "📞 Calling the landlord…");
   if (call.mode === "elevenlabs") {
+    // Cross-instance guard: two serverless instances can both decide to call (consent + autopilot racing).
+    // ElevenLabs is the shared source of truth: if a call from this agent started in the last 2 minutes, don't dial again.
+    try {
+      const recent = (await el(`/v1/convai/conversations?agent_id=${encodeURIComponent(process.env.ELEVENLABS_AGENT_ID ?? "")}&page_size=3`)).conversations as { conversation_id?: string; status?: string; start_time_unix_secs?: number }[] | undefined;
+      const live = (recent ?? []).find((c) => ["initiated", "in-progress"].includes(String(c.status)) && Date.now() / 1000 - (c.start_time_unix_secs ?? 0) < 120);
+      if (live) {
+        call.conversationId = live.conversation_id; indexCall(call.conversationId);
+        log("call", "📞 A call is already in progress; not dialing again");
+        return { call, vars };
+      }
+    } catch { /* if the check fails, place the call */ }
     try {
       const sip = process.env.ELEVENLABS_TELEPHONY === "sip";
       const r = await el(`/v1/convai/${sip ? "sip-trunk" : "twilio"}/outbound-call`, { method: "POST", body: JSON.stringify({
