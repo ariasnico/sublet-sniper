@@ -1,8 +1,24 @@
-.login { min-height: 100dvh; display: grid; place-items: center; padding: 24px 16px; background: radial-gradient(1200px 500px at 50% -10%, var(--accent-soft), transparent 70%), var(--bg); }
-.login-card { width: 100%; max-width: 360px; background: var(--panel); border-radius: 22px; padding: 32px 28px 26px; box-shadow: var(--shadow), 0 0 0 1px var(--line); display: flex; flex-direction: column; gap: 14px; text-align: center; animation: login-in 260ms var(--ease-out) both; }
-.login-brand { display: inline-flex; align-self: center; }
-.login-card h1 { font-size: 19px; font-weight: 650; letter-spacing: -0.01em; margin: 2px 0 6px; }
+/* Split sign-in: San Francisco + what the agent does on the left, the form on the right. */
+.login { min-height: 100dvh; display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); background: var(--bg); }
+.login-side { position: relative; overflow: hidden; color: #fff; isolation: isolate; background: #2a2320; }
+.login-photo { object-fit: cover; object-position: 30% 50%; z-index: -2; }
+.login-side::after { content: ""; position: absolute; inset: 0; z-index: -1; background: linear-gradient(160deg, rgba(24,14,8,.82) 0%, rgba(24,14,8,.55) 45%, rgba(24,14,8,.25) 75%, rgba(24,14,8,.6) 100%); }
+.login-side-in { height: 100%; display: flex; flex-direction: column; padding: 44px 56px; gap: 24px; }
+.login-logo { display: inline-flex; align-items: center; gap: 12px; color: #fff; font-size: 20px; font-weight: 700; letter-spacing: -0.01em; text-decoration: none; }
+.login-logo span { width: 48px; height: 48px; border-radius: 14px; display: grid; place-items: center; background: rgba(255,255,255,.92); box-shadow: 0 8px 24px rgba(0,0,0,.25); }
+.login-pitch { margin: auto 0; max-width: 520px; }
+.login-pitch h2 { margin: 0; font-size: clamp(34px, 3.8vw, 54px); font-weight: 750; letter-spacing: -0.03em; line-height: 1.04; text-wrap: balance; }
+.login-pitch p { margin: 16px 0 0; font-size: 18px; opacity: .88; }
+.login-pitch ul { list-style: none; margin: 28px 0 0; padding: 0; display: grid; gap: 14px; }
+.login-pitch li { display: flex; align-items: center; gap: 12px; font-size: 16.5px; }
+.login-pitch li i { flex: none; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: #fff; box-shadow: 0 4px 12px rgba(0,0,0,.25); }
+.login-side small { font-size: 13px; opacity: .7; }
+.login-main { display: grid; place-items: center; padding: 32px 24px; background: radial-gradient(700px 400px at 70% 0%, var(--accent-soft), transparent 70%), var(--bg); }
+.login-card { width: 100%; max-width: 400px; background: var(--panel); border-radius: 22px; padding: 36px 32px 30px; box-shadow: var(--shadow), 0 0 0 1px var(--line); display: flex; flex-direction: column; gap: 14px; animation: login-in 320ms var(--ease-out) both; }
+.login-card h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; margin: 0; }
+.login-sub { margin: -6px 0 8px; color: var(--mute); font-size: 14.5px; }
 .login-card form { display: flex; flex-direction: column; gap: 10px; }
+.login-card label { font-size: 13.5px; font-weight: 600; color: var(--text); }
 .login-card button.lg { width: 100%; }
 .login-sent { margin: 0; color: var(--mute); background: var(--accent-soft); border-radius: 12px; padding: 12px 14px; }
 .login-or { display: flex; align-items: center; gap: 10px; color: var(--faint); font-size: 12px; }
@@ -11,3 +27,10 @@
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 @keyframes login-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .login-card { animation: none; } }
+@media (max-width: 900px) {
+  .login { grid-template-columns: 1fr; }
+  .login-side-in { padding: 28px 20px; gap: 16px; min-height: 300px; }
+  .login-pitch ul, .login-side small { display: none; }
+  .login-pitch h2 { font-size: 30px; }
+  .login-main { padding: 24px 16px 40px; }
+}
