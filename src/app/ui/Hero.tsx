@@ -153,6 +153,19 @@ export function BookedHero({ e, title, saved, receipt, gcal, ics }: { e: { id: s
   </article>;
 }
 
+/** A ranked tile under the hero: photo, title, price, safety, one action. The photo opens the listing. */
+export function MatchTile({ l, rank, onHover, onPick, onXray }: { l: RankedListing; rank: number; onHover?: (id: string | null) => void; onPick?: () => void; onXray?: () => void }) {
+  return <article className={`mtile ${l.scam.light}`} onMouseEnter={() => onHover?.(l.id)} onMouseLeave={() => onHover?.(null)}>
+    <a className="mtile-ph" href={l.url} target="_blank" rel="noreferrer" aria-label={`Open ${cleanTitle(l.title)}`}><Photo l={l} big /><span className="mtile-n">#{rank}</span></a>
+    <div className="mtile-b">
+      <div className="mtile-t" title={cleanTitle(l.title)}>{shortTitle(l.title, 5)}</div>
+      <div className="mtile-m"><b>{l.priceMonthly ? usd(l.priceMonthly) : "?"}</b><span>/mo</span>
+        <button type="button" className={`mtile-risk ${l.scam.light}`} onClick={onXray} aria-label={`Scam X-ray: risk ${l.scam.score} of 100`}><i aria-hidden="true" />{LABEL[l.scam.light]}</button></div>
+      {onPick && <button type="button" className="mtile-go" onClick={onPick}>Handle</button>}
+    </div>
+  </article>;
+}
+
 /** A compact ranked row under the hero: thumb, title, price. */
 export function MatchRow({ l, rank, onHover, onPick }: { l: RankedListing; rank: number; onHover?: (id: string | null) => void; onPick?: () => void }) {
   const row = <a className={`mrow ${l.scam.light}`} href={l.url} target="_blank" rel="noreferrer" onMouseEnter={() => onHover?.(l.id)} onMouseLeave={() => onHover?.(null)}>

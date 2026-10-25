@@ -13,7 +13,7 @@ import type { LiveCall } from "@/lib/voice";
 import { deal } from "./ui/Inbox";
 import { StatusBar, type StatusInput } from "./ui/Mission";
 import { Activity, callOf, lastAt } from "./ui/Activity";
-import { BookedHero, MatchHero, MatchRow, WorkHero, shortTitle } from "./ui/Hero";
+import { BookedHero, MatchHero, MatchTile, WorkHero, shortTitle } from "./ui/Hero";
 import type { AutopilotView, CraigslistDraft, NeedsYouItem } from "@/lib/autopilot";
 import { XRay } from "./ui/XRay";
 import { ChatThread } from "./ui/chat/ChatThread";
@@ -548,7 +548,7 @@ export default function Dashboard({ elevenLabsAgentId, user = null }: { elevenLa
   </>;
   const more = ui === "booked" ? Math.max(0, nSafe - 1) : nSafe;
   const collapsed = <div className="more">
-    {ui === "results" && s?.results.slice(1).map((l, i) => <MatchRow key={l.id} l={l} rank={i + 2} onHover={setHovered} onPick={pickFor(l.id)} />)}
+    {ui === "results" && <div className="mtiles">{s?.results.slice(1).map((l, i) => <MatchTile key={l.id} l={l} rank={i + 2} onHover={setHovered} onPick={pickFor(l.id)} onXray={() => setXray(l.id)} />)}</div>}
     {hasResults && (ui === "booked"
       ? <button type="button" className="more-link" onClick={() => showList("ranked")}>{more} more if this falls through<span aria-hidden="true">▸</span></button>
       : <div className="more-links">
